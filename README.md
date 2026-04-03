@@ -136,9 +136,9 @@ Autentificarea curenta este bazata pe **email/parola + JWT Bearer token**.
 Fisierul `.env` din root trebuie sa contina cel putin:
 
 ```env
-DB_URL=jdbc:postgresql://localhost:5432/inventoryapp
-DB_USERNAME=mirceone
-DB_PASSWORD=postgres
+DB_URL=jdbc:postgresql://localhost:5432/example
+DB_USERNAME=user_example
+DB_PASSWORD=pass_example
 DB_MAINTENANCE_DB=postgres
 APP_DB_CREATE_IF_MISSING=true
 ```
