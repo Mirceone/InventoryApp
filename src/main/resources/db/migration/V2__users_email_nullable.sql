@@ -1,4 +1,4 @@
--- Allow social providers (Google) to have no email claim at first login.
+-- Allow optional email for compatibility with existing social-provider records.
 -- PostgreSQL allows multiple NULLs with UNIQUE constraints.
 
 ALTER TABLE users

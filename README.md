@@ -99,7 +99,7 @@ Entitati principale:
 - `ProductEntity`
 
 Enum-uri principale:
-- `ProviderType` (`LOCAL`, `GOOGLE`)
+- `ProviderType` (`LOCAL`)
 - `MemberRole`
 
 ## Cum functioneaza autentificarea

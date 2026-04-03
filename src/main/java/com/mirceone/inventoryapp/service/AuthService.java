@@ -1,7 +1,9 @@
 package com.mirceone.inventoryapp.service;
 
 import com.mirceone.inventoryapp.api.auth.LoginRequest;
+import com.mirceone.inventoryapp.api.auth.LogoutRequest;
 import com.mirceone.inventoryapp.api.auth.MeResponse;
+import com.mirceone.inventoryapp.api.auth.RefreshRequest;
 import com.mirceone.inventoryapp.api.auth.SignupRequest;
 import com.mirceone.inventoryapp.api.auth.AuthResponse;
 import com.mirceone.inventoryapp.model.ProviderType;
@@ -23,11 +25,18 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenService jwtTokenService;
+    private final RefreshTokenService refreshTokenService;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtTokenService jwtTokenService) {
+    public AuthService(
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            JwtTokenService jwtTokenService,
+            RefreshTokenService refreshTokenService
+    ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenService = jwtTokenService;
+        this.refreshTokenService = refreshTokenService;
     }
 
     @Transactional
@@ -50,10 +59,10 @@ public class AuthService {
 
         user = userRepository.save(user);
 
-        String token = jwtTokenService.createAccessToken(user.getId(), user.getEmail(), user.getProvider());
-        return new AuthResponse("Bearer", token, jwtTokenService.getAccessTokenTtlSeconds());
+        return issueTokenPair(user);
     }
 
+    @Transactional
     public AuthResponse login(LoginRequest request) {
         String email = request.email().trim().toLowerCase(Locale.ROOT);
 
@@ -69,8 +78,21 @@ public class AuthService {
             throw new ResponseStatusException(UNAUTHORIZED, "Invalid email or password");
         }
 
-        String token = jwtTokenService.createAccessToken(user.getId(), user.getEmail(), user.getProvider());
-        return new AuthResponse("Bearer", token, jwtTokenService.getAccessTokenTtlSeconds());
+        return issueTokenPair(user);
+    }
+
+    @Transactional
+    public AuthResponse refresh(RefreshRequest request) {
+        UUID userId = refreshTokenService.consumeAndRotate(request.refreshToken());
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(UNAUTHORIZED, "User not found for refresh token"));
+
+        return issueTokenPair(user);
+    }
+
+    @Transactional
+    public void logout(LogoutRequest request) {
+        refreshTokenService.revoke(request.refreshToken());
     }
 
     public MeResponse getMe(UUID userId) {
@@ -82,6 +104,19 @@ public class AuthService {
                 user.getEmail(),
                 user.getDisplayName(),
                 user.getProvider()
+        );
+    }
+
+    private AuthResponse issueTokenPair(UserEntity user) {
+        String accessToken = jwtTokenService.createAccessToken(user.getId(), user.getEmail(), user.getProvider());
+        String refreshToken = refreshTokenService.create(user.getId());
+
+        return new AuthResponse(
+                "Bearer",
+                accessToken,
+                jwtTokenService.getAccessTokenTtlSeconds(),
+                refreshToken,
+                refreshTokenService.getRefreshTokenTtlSeconds()
         );
     }
 }
