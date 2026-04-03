@@ -11,12 +11,15 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -30,7 +33,7 @@ class RefreshTokenServiceTest {
 
     @BeforeEach
     void setUp() {
-        refreshTokenService = new RefreshTokenService(refreshTokenRepository, 3600);
+        refreshTokenService = new RefreshTokenService(refreshTokenRepository, 3600, 5);
 
         when(refreshTokenRepository.save(ArgumentMatchers.any(RefreshTokenEntity.class)))
                 .thenAnswer(invocation -> {
@@ -39,7 +42,7 @@ class RefreshTokenServiceTest {
                     return entity;
                 });
 
-        when(refreshTokenRepository.findByTokenHash(ArgumentMatchers.anyString()))
+        lenient().when(refreshTokenRepository.findByTokenHash(ArgumentMatchers.anyString()))
                 .thenAnswer(invocation -> Optional.ofNullable(store.get(invocation.getArgument(0))));
     }
 
@@ -60,5 +63,18 @@ class RefreshTokenServiceTest {
         refreshTokenService.revoke(refreshToken);
 
         assertThrows(ResponseStatusException.class, () -> refreshTokenService.consumeAndRotate(refreshToken));
+    }
+
+    @Test
+    void revokeAllForUserRevokesAllActiveTokens() {
+        UUID userId = UUID.randomUUID();
+        RefreshTokenEntity token1 = new RefreshTokenEntity(userId, "hash1", java.time.Instant.now().plusSeconds(1000));
+        RefreshTokenEntity token2 = new RefreshTokenEntity(userId, "hash2", java.time.Instant.now().plusSeconds(1000));
+        when(refreshTokenRepository.findAllByUserIdAndRevokedAtIsNull(userId)).thenReturn(List.of(token1, token2));
+
+        refreshTokenService.revokeAllForUser(userId);
+
+        verify(refreshTokenRepository).save(token1);
+        verify(refreshTokenRepository).save(token2);
     }
 }

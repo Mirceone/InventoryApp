@@ -7,6 +7,10 @@ import jakarta.validation.constraints.Size;
 public record CreateProductRequest(
         @NotBlank String name,
         @Size(max = 128) String sku,
-        @Min(0) int initialQuantity
+        @Min(0) int initialQuantity,
+        /** When null, defaults to true. */
+        Boolean reorderEnabled,
+        /** When null, application default threshold is used at runtime. */
+        @Min(0) Integer reorderThreshold
 ) {
 }

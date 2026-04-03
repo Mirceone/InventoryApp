@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -70,5 +71,14 @@ class AuthServiceRefreshTest {
                 .thenThrow(new ResponseStatusException(org.springframework.http.HttpStatus.UNAUTHORIZED, "Refresh token expired or revoked"));
 
         assertThrows(ResponseStatusException.class, () -> authService.refresh(new RefreshRequest("revoked-token")));
+    }
+
+    @Test
+    void logoutAllRevokesAllUserSessions() {
+        UUID userId = UUID.randomUUID();
+
+        authService.logoutAll(userId);
+
+        verify(refreshTokenService).revokeAllForUser(userId);
     }
 }

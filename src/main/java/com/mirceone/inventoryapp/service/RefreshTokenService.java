@@ -13,6 +13,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.List;
 import java.util.UUID;
 
 import static org.springframework.http.HttpStatus.UNAUTHORIZED;
@@ -22,18 +23,24 @@ public class RefreshTokenService {
 
     private final RefreshTokenRepository refreshTokenRepository;
     private final long refreshTokenTtlSeconds;
+    private final int maxActiveRefreshTokensPerUser;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public RefreshTokenService(
             RefreshTokenRepository refreshTokenRepository,
-            @Value("${app.jwt.refresh-token-ttl-seconds:1209600}") long refreshTokenTtlSeconds
+            @Value("${app.jwt.refresh-token-ttl-seconds:1209600}") long refreshTokenTtlSeconds,
+            @Value("${app.jwt.max-active-refresh-tokens-per-user:5}") int maxActiveRefreshTokensPerUser
     ) {
         this.refreshTokenRepository = refreshTokenRepository;
         this.refreshTokenTtlSeconds = refreshTokenTtlSeconds;
+        this.maxActiveRefreshTokensPerUser = maxActiveRefreshTokensPerUser;
     }
 
     @Transactional
     public String create(UUID userId) {
+        cleanupExpiredTokens();
+        enforceActiveSessionLimit(userId);
+
         String rawToken = generateRawToken();
         String tokenHash = hashToken(rawToken);
         Instant expiresAt = Instant.now().plusSeconds(refreshTokenTtlSeconds);
@@ -45,6 +52,7 @@ public class RefreshTokenService {
 
     @Transactional
     public UUID consumeAndRotate(String rawToken) {
+        cleanupExpiredTokens();
         RefreshTokenEntity current = getActive(rawToken);
         current.setRevokedAt(Instant.now());
         refreshTokenRepository.save(current);
@@ -62,8 +70,41 @@ public class RefreshTokenService {
         });
     }
 
+    @Transactional
+    public void revokeAllForUser(UUID userId) {
+        List<RefreshTokenEntity> tokens = refreshTokenRepository.findAllByUserIdAndRevokedAtIsNull(userId);
+        Instant now = Instant.now();
+        for (RefreshTokenEntity token : tokens) {
+            token.setRevokedAt(now);
+            refreshTokenRepository.save(token);
+        }
+    }
+
     public long getRefreshTokenTtlSeconds() {
         return refreshTokenTtlSeconds;
+    }
+
+    @Transactional
+    public void cleanupExpiredTokens() {
+        refreshTokenRepository.deleteByExpiresAtBefore(Instant.now());
+    }
+
+    private void enforceActiveSessionLimit(UUID userId) {
+        Instant now = Instant.now();
+        long activeCount = refreshTokenRepository.countByUserIdAndRevokedAtIsNullAndExpiresAtAfter(userId, now);
+        if (activeCount < maxActiveRefreshTokensPerUser) {
+            return;
+        }
+
+        List<RefreshTokenEntity> activeTokens = refreshTokenRepository
+                .findAllByUserIdAndRevokedAtIsNullAndExpiresAtAfterOrderByCreatedAtAsc(userId, now);
+
+        int toRevoke = (int) (activeCount - maxActiveRefreshTokensPerUser + 1);
+        for (int i = 0; i < Math.min(toRevoke, activeTokens.size()); i++) {
+            RefreshTokenEntity token = activeTokens.get(i);
+            token.setRevokedAt(Instant.now());
+            refreshTokenRepository.save(token);
+        }
     }
 
     private RefreshTokenEntity getActive(String rawToken) {

@@ -1,6 +1,7 @@
 package com.mirceone.inventoryapp.api.firms;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mirceone.inventoryapp.security.AuthRateLimiter;
 import com.mirceone.inventoryapp.service.FirmService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +33,9 @@ class FirmControllerWebMvcTest {
 
     @MockitoBean
     private FirmService firmService;
+
+    @MockitoBean
+    private AuthRateLimiter authRateLimiter;
 
     @Test
     void createFirmReturnsCreatedFirm() throws Exception {

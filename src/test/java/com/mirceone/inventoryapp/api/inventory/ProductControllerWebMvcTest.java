@@ -1,6 +1,7 @@
 package com.mirceone.inventoryapp.api.inventory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mirceone.inventoryapp.security.AuthRateLimiter;
 import com.mirceone.inventoryapp.service.InventoryService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +20,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -36,12 +38,15 @@ class ProductControllerWebMvcTest {
     @MockitoBean
     private InventoryService inventoryService;
 
+    @MockitoBean
+    private AuthRateLimiter authRateLimiter;
+
     @Test
     void createProductReturnsCreatedProduct() throws Exception {
         UUID userId = UUID.randomUUID();
         UUID firmId = UUID.randomUUID();
-        CreateProductRequest request = new CreateProductRequest("Keyboard", "KB-001", 5);
-        ProductResponse response = new ProductResponse(UUID.randomUUID(), "Keyboard", "KB-001", 5);
+        CreateProductRequest request = new CreateProductRequest("Keyboard", "KB-001", 5, null, null);
+        ProductResponse response = new ProductResponse(UUID.randomUUID(), "Keyboard", "KB-001", 5, true, null);
 
         when(inventoryService.createProduct(eq(userId), eq(firmId), any(CreateProductRequest.class))).thenReturn(response);
 
@@ -60,8 +65,8 @@ class ProductControllerWebMvcTest {
         UUID userId = UUID.randomUUID();
         UUID firmId = UUID.randomUUID();
         when(inventoryService.listProducts(eq(userId), eq(firmId))).thenReturn(List.of(
-                new ProductResponse(UUID.randomUUID(), "Mouse", "MS-1", 10),
-                new ProductResponse(UUID.randomUUID(), "Monitor", "MN-1", 4)
+                new ProductResponse(UUID.randomUUID(), "Mouse", "MS-1", 10, true, null),
+                new ProductResponse(UUID.randomUUID(), "Monitor", "MN-1", 4, true, 6)
         ));
 
         mockMvc.perform(get("/firms/{firmId}/products", firmId)
@@ -77,7 +82,7 @@ class ProductControllerWebMvcTest {
         UUID firmId = UUID.randomUUID();
         UUID productId = UUID.randomUUID();
         SetStockRequest request = new SetStockRequest(25);
-        ProductResponse response = new ProductResponse(productId, "Monitor", "MN-1", 25);
+        ProductResponse response = new ProductResponse(productId, "Monitor", "MN-1", 25, true, null);
 
         when(inventoryService.setStock(eq(userId), eq(firmId), eq(productId), any(SetStockRequest.class))).thenReturn(response);
 
@@ -95,7 +100,7 @@ class ProductControllerWebMvcTest {
         UUID firmId = UUID.randomUUID();
         UUID productId = UUID.randomUUID();
         AdjustStockRequest request = new AdjustStockRequest(-3);
-        ProductResponse response = new ProductResponse(productId, "Mouse", "MS-1", 7);
+        ProductResponse response = new ProductResponse(productId, "Mouse", "MS-1", 7, true, null);
 
         when(inventoryService.adjustStock(eq(userId), eq(firmId), eq(productId), any(AdjustStockRequest.class))).thenReturn(response);
 
@@ -111,7 +116,7 @@ class ProductControllerWebMvcTest {
     void createProductWithInvalidPayloadReturnsValidationError() throws Exception {
         UUID userId = UUID.randomUUID();
         UUID firmId = UUID.randomUUID();
-        CreateProductRequest invalid = new CreateProductRequest("", "SKU", 1);
+        CreateProductRequest invalid = new CreateProductRequest("", "SKU", 1, null, null);
 
         mockMvc.perform(post("/firms/{firmId}/products", firmId)
                         .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt -> jwt.subject(userId.toString())))
@@ -139,6 +144,42 @@ class ProductControllerWebMvcTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("BUSINESS_ERROR"))
                 .andExpect(jsonPath("$.message").value("Stock cannot be negative"));
+    }
+
+    @Test
+    void listBuyListReturnsRestockItems() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID firmId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+        when(inventoryService.listBuyList(eq(userId), eq(firmId))).thenReturn(List.of(
+                new BuyListItemResponse(productId, "Low", "L-1", 2, 4, 2)
+        ));
+
+        mockMvc.perform(get("/firms/{firmId}/products/buy-list", firmId)
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt -> jwt.subject(userId.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].name").value("Low"))
+                .andExpect(jsonPath("$[0].shortfall").value(2))
+                .andExpect(jsonPath("$[0].effectiveMinThreshold").value(4));
+    }
+
+    @Test
+    void updateProductReturnsUpdatedProduct() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID firmId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+        UpdateProductRequest request = new UpdateProductRequest(null, null, null, 8);
+        ProductResponse response = new ProductResponse(productId, "Name", "SKU", 5, true, 8);
+
+        when(inventoryService.updateProduct(eq(userId), eq(firmId), eq(productId), any(UpdateProductRequest.class)))
+                .thenReturn(response);
+
+        mockMvc.perform(patch("/firms/{firmId}/products/{productId}", firmId, productId)
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt -> jwt.subject(userId.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reorderThreshold").value(8));
     }
 
     @Test

@@ -22,7 +22,7 @@ Contine codul Java principal al aplicatiei.
 Contine configurari si migrari SQL.
 
 - `application.yml` - configuratia aplicatiei (datasource, Flyway, JWT etc.).
-- `db/migration/` - migrari Flyway (`V1`, `V2`, `V3`).
+- `db/migration/` - migrari Flyway (`V1` … `V6`).
 
 ## Rolul directoarelor si claselor principale
 
@@ -39,6 +39,9 @@ Contine configurari si migrari SQL.
 Expune endpoint-uri pentru autentificare:
 - `POST /auth/signup`
 - `POST /auth/login`
+- `POST /auth/refresh`
+- `POST /auth/logout`
+- `POST /auth/logout-all`
 - `GET /auth/me`
 
 DTO-uri relevante:
@@ -52,8 +55,10 @@ DTO-uri relevante:
 - Listare firme pentru utilizatorul curent
 
 #### `api/inventory/ProductController`
-- Creare produs
+- Creare produs (prag reaprovizionare optional; implicit din `app.inventory.default-reorder-threshold`)
 - Listare produse per firma
+- `GET .../products/buy-list` — produse cu stoc sub pragul efectiv (lista de cumparaturi / restock)
+- `PATCH .../products/{productId}` — actualizare partiala (nume, SKU, prag reaprovizionare)
 - Setare stoc
 - Ajustare stoc
 
@@ -65,11 +70,27 @@ DTO-uri relevante:
 #### `service/AuthService`
 - `signup`: creeaza utilizator local cu email/parola.
 - `login`: valideaza credentialele.
+- `refresh`: roteste refresh token-ul si emite un token pair nou.
+- `logout`: revoca refresh token-ul primit.
 - `getMe`: returneaza datele userului autentificat.
 
 #### `service/JwtTokenService`
 - Genereaza access token JWT semnat.
 - Pune in claims: `sub` (userId), `email`, `provider`, `exp`.
+
+#### `service/RefreshTokenService`
+- Genereaza refresh token random si stocheaza doar hash-ul in DB.
+- Valideaza, revoca si roteste refresh token-uri.
+- Aplica hardening:
+  - limita sesiuni active per user,
+  - cleanup token-uri expirate,
+  - `logout-all-sessions` (revocare toate sesiunile active pentru user).
+
+#### `security/AuthRateLimitFilter` + `security/AuthRateLimiter`
+- Aplica rate limiting de baza pe endpoint-urile sensibile:
+  - `POST /auth/login`
+  - `POST /auth/refresh`
+- Cand limita este depasita, API raspunde cu `429` si codul `RATE_LIMIT_EXCEEDED`.
 
 #### `service/FirmService`
 - Creare firma.
@@ -79,6 +100,8 @@ DTO-uri relevante:
 #### `service/InventoryService`
 - Operatii pe produse/stoc.
 - Verifica accesul userului la firma inainte de operatii.
+- Lista de reaprovizionare derivata: produse cu `reorder_enabled` si stoc curent sub pragul efectiv (explicit per produs sau default aplicatie).
+- Inregistreaza audit trail pentru modificarile de stoc (`SET`, `ADJUST`) cu actor, cantitate anterioara, cantitate noua si delta.
 
 ### 4) Repository (acces DB)
 
@@ -97,6 +120,8 @@ Entitati principale:
 - `FirmEntity`
 - `FirmMemberEntity`
 - `ProductEntity`
+- `RefreshTokenEntity`
+- `StockChangeEventEntity`
 
 Enum-uri principale:
 - `ProviderType` (`LOCAL`)
@@ -104,17 +129,19 @@ Enum-uri principale:
 
 ## Cum functioneaza autentificarea
 
-Autentificarea curenta este bazata pe **email/parola + JWT Bearer token**.
+Autentificarea curenta este bazata pe **email/parola + JWT Bearer token + refresh token**.
 
 ### Fluxul de autentificare
 
 1. Utilizatorul face `POST /auth/signup` cu email + parola.
 2. Parola este hash-uita cu BCrypt.
 3. Se salveaza userul cu provider `LOCAL`.
-4. Serverul returneaza un access token JWT.
-5. Pentru endpoint-urile protejate, clientul trimite `Authorization: Bearer <token>`.
-6. Spring Security valideaza token-ul si pune principalul in context.
-7. Controller-ele citesc userId din `jwt.getSubject()`.
+4. Serverul returneaza token pair (`accessToken` + `refreshToken`).
+5. Pentru endpoint-urile protejate, clientul trimite `Authorization: Bearer <accessToken>`.
+6. Cand access token-ul expira, clientul foloseste `POST /auth/refresh` pentru un token pair nou.
+7. La `POST /auth/logout`, refresh token-ul este revocat.
+8. Spring Security valideaza access token-ul si pune principalul in context.
+9. Controller-ele citesc userId din `jwt.getSubject()`.
 
 ## OAuth sau nu?
 
@@ -130,6 +157,9 @@ Autentificarea curenta este bazata pe **email/parola + JWT Bearer token**.
 - Flyway ruleaza migrarile din `src/main/resources/db/migration` la startup.
 - `spring.jpa.hibernate.ddl-auto: none` inseamna ca schema nu este generata automat de Hibernate.
 - Schema este controlata strict prin migrari versionate.
+- Migrarea `V4` adauga tabela `refresh_tokens`.
+- Migrarea `V5` adauga tabela `stock_change_events`.
+- Migrarea `V6` adauga pe `products` coloanele `reorder_enabled` si `reorder_threshold` (prag minim pentru reaprovizionare).
 
 ## Configurare locala
 
@@ -141,6 +171,11 @@ DB_USERNAME=user_example
 DB_PASSWORD=pass_example
 DB_MAINTENANCE_DB=postgres
 APP_DB_CREATE_IF_MISSING=true
+APP_JWT_REFRESH_TOKEN_TTL_SECONDS=1209600
+APP_JWT_MAX_ACTIVE_REFRESH_TOKENS_PER_USER=5
+APP_SECURITY_RATE_LIMIT_AUTH_MAX_REQUESTS=20
+APP_SECURITY_RATE_LIMIT_AUTH_WINDOW_SECONDS=60
+APP_DEFAULT_REORDER_THRESHOLD=4
 ```
 
 ## Rulare
@@ -149,11 +184,30 @@ APP_DB_CREATE_IF_MISSING=true
 ./mvnw spring-boot:run
 ```
 
+## API docs (Swagger)
+
+Dupa pornirea aplicatiei, documentatia OpenAPI este disponibila la:
+
+- Swagger UI: `http://localhost:8080/swagger-ui/index.html`
+- OpenAPI JSON: `http://localhost:8080/v3/api-docs`
+
 ## Teste
 
 ```bash
 ./mvnw test
 ```
+
+### Teste de integrare (PostgreSQL local)
+
+Nu folosesc Docker. Trebuie un server PostgreSQL accesibil si o **baza separata** pentru teste (aceleasi migrari Flyway ca in productie). O data, creaza baza (exemplu):
+
+```sql
+CREATE DATABASE inventoryapp_test;
+```
+
+URL-ul implicit din `src/test/resources/application-test.yml` este `jdbc:postgresql://localhost:5432/inventoryapp_test`. Poti suprascrie cu `TEST_DB_URL`, `TEST_DB_USERNAME`, `TEST_DB_PASSWORD`.
+
+La fiecare pornire a contextului Spring cu profilul `test`, Flyway executa `clean()` apoi `migrate()` — schema de test este recreata din migrari (nu se foloseste baza de productie).
 
 ### Rezumat implementari teste
 
@@ -165,8 +219,9 @@ Suita de teste acopera atat logica de business (service), cat si contractele HTT
 - **Refresh token service**
   - creare token, consum/rotatie, revocare
 - **Inventory service**
-  - creare produs, setare stoc, ajustare stoc
+  - creare produs, setare stoc, ajustare stoc, lista reaprovizionare (`buy-list`), prag minim
   - cazuri de eroare: produs inexistent, stoc negativ
+  - audit trail la modificari de stoc
 - **Auth controller (MockMvc)**
   - `signup`, `login`, `refresh`, `logout`, `me`
   - validare format raspuns si payload-uri invalide (`VALIDATION_ERROR`, `BUSINESS_ERROR`)
@@ -174,7 +229,12 @@ Suita de teste acopera atat logica de business (service), cat si contractele HTT
   - creare/listare firme
   - payload invalid + acces fara token (`401`)
 - **Product controller (MockMvc)**
-  - creare/listare produse, setare/ajustare stoc
+  - creare/listare produse, `buy-list`, `PATCH` produs, setare/ajustare stoc
   - payload invalid, eroare de business si acces fara token (`401`)
+- **Integration tests (DB-backed, PostgreSQL local)**
+  - Flyway migration checks (`V1..V6`, tabele esentiale)
+  - end-to-end pentru flow-uri `AuthService` (signup/refresh/logout/logout-all)
+  - end-to-end pentru `InventoryService` + audit trail in `stock_change_events`
+  - profil Spring `test` + baza dedicata (ex. `inventoryapp_test`), aceleasi migrari ca in productie; la fiecare pornire a contextului de test, Flyway ruleaza `clean` apoi `migrate` (vezi `application-test.yml` si `IntegrationTestFlywayConfig`)
 
-La momentul actual, suita ruleaza cu succes (`BUILD SUCCESS`) si include **28 de teste**.
+La momentul actual, suita ruleaza cu succes (`BUILD SUCCESS`) si include **47 de teste**.

@@ -95,6 +95,11 @@ public class AuthService {
         refreshTokenService.revoke(request.refreshToken());
     }
 
+    @Transactional
+    public void logoutAll(UUID userId) {
+        refreshTokenService.revokeAllForUser(userId);
+    }
+
     public MeResponse getMe(UUID userId) {
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "User not found"));

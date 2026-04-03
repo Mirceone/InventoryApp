@@ -1,6 +1,7 @@
 ### Added by Me, Mirceone!!
 .env
 .idea
+to-do.md
 
 target/
 !.mvn/wrapper/maven-wrapper.jar

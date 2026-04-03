@@ -1,6 +1,7 @@
 package com.mirceone.inventoryapp.api.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mirceone.inventoryapp.security.AuthRateLimiter;
 import com.mirceone.inventoryapp.service.AuthService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +33,9 @@ class AuthControllerWebMvcTest {
 
     @MockitoBean
     private AuthService authService;
+
+    @MockitoBean
+    private AuthRateLimiter authRateLimiter;
 
     @Test
     void signupReturnsTokenPair() throws Exception {
