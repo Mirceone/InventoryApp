@@ -154,3 +154,27 @@ APP_DB_CREATE_IF_MISSING=true
 ```bash
 ./mvnw test
 ```
+
+### Rezumat implementari teste
+
+Suita de teste acopera atat logica de business (service), cat si contractele HTTP (controller, MockMvc), inclusiv scenarii negative.
+
+- **Auth service**
+  - signup, login, refresh, logout
+  - cazuri de eroare: email duplicat, parola invalida, refresh invalid/revocat
+- **Refresh token service**
+  - creare token, consum/rotatie, revocare
+- **Inventory service**
+  - creare produs, setare stoc, ajustare stoc
+  - cazuri de eroare: produs inexistent, stoc negativ
+- **Auth controller (MockMvc)**
+  - `signup`, `login`, `refresh`, `logout`, `me`
+  - validare format raspuns si payload-uri invalide (`VALIDATION_ERROR`, `BUSINESS_ERROR`)
+- **Firm controller (MockMvc)**
+  - creare/listare firme
+  - payload invalid + acces fara token (`401`)
+- **Product controller (MockMvc)**
+  - creare/listare produse, setare/ajustare stoc
+  - payload invalid, eroare de business si acces fara token (`401`)
+
+La momentul actual, suita ruleaza cu succes (`BUILD SUCCESS`) si include **28 de teste**.
