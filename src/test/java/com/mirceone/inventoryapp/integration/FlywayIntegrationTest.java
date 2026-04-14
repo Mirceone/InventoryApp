@@ -16,18 +16,16 @@ class FlywayIntegrationTest extends IntegrationTestBase {
 
     @Test
     void flywayCreatesCoreTablesIncludingAuditAndRefreshTokens() {
-        Integer usersTable = jdbcTemplate.queryForObject(
-                "select count(*) from information_schema.tables where table_name = 'users'",
-                Integer.class
-        );
-        Integer refreshTokensTable = jdbcTemplate.queryForObject(
-                "select count(*) from information_schema.tables where table_name = 'refresh_tokens'",
-                Integer.class
-        );
-        Integer stockEventsTable = jdbcTemplate.queryForObject(
-                "select count(*) from information_schema.tables where table_name = 'stock_change_events'",
-                Integer.class
-        );
+        // table_schema + table_type evita randuri duplicate in H2 (ex. alias-uri in information_schema)
+        String base = """
+                select count(*) from information_schema.tables
+                where lower(table_name) = ?
+                  and table_type = 'BASE TABLE'
+                  and upper(table_schema) = 'PUBLIC'
+                """;
+        Integer usersTable = jdbcTemplate.queryForObject(base, Integer.class, "users");
+        Integer refreshTokensTable = jdbcTemplate.queryForObject(base, Integer.class, "refresh_tokens");
+        Integer stockEventsTable = jdbcTemplate.queryForObject(base, Integer.class, "stock_change_events");
 
         assertEquals(1, usersTable);
         assertEquals(1, refreshTokensTable);
