@@ -34,7 +34,8 @@ jobs:
           --health-retries 10
 
     env:
-      TEST_DB_URL: jdbc:postgresql://postgres:5432/inventoryapp_test
+      # Pe runner (fara job container), porturile serviciului sunt mapate pe localhost.
+      TEST_DB_URL: jdbc:postgresql://localhost:5432/inventoryapp_test
       TEST_DB_USERNAME: test
       TEST_DB_PASSWORD: test
 
@@ -48,5 +49,16 @@ jobs:
           distribution: temurin
           cache: maven
 
-      - name: Build and test with Maven
-        run: mvn -B verify --file pom.xml
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -U test && exit 0
+            sleep 1
+          done
+          exit 1
+
+      - name: Run tests
+        run: mvn -B test --file pom.xml
