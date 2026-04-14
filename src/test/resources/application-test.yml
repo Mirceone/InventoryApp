@@ -1,12 +1,14 @@
-# Profil test: H2 in-memory (CI + local), migrari Flyway in db/migration/h2 (fara pgcrypto).
-# Productia ramane PostgreSQL cu scripturile din src/main/resources/db/migration.
+# Profil test: PostgreSQL dedicat (local + CI). Aceleasi migrari Flyway ca in productie
+# (classpath:db/migration din src/main/resources). La startup: clean + migrate (vezi IntegrationTestFlywayConfig).
+#
+# Local: creeaza o data baza, ex. CREATE DATABASE inventoryapp_test;
+# Variabile: TEST_DB_URL, TEST_DB_USERNAME, TEST_DB_PASSWORD
 
 spring:
   datasource:
-    url: jdbc:h2:mem:testdb;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
+    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/inventoryapp_test}
+    username: ${TEST_DB_USERNAME:${DB_USERNAME:mirceone}}
+    password: ${TEST_DB_PASSWORD:${DB_PASSWORD:postgres}}
 
   jpa:
     hibernate:
@@ -16,7 +18,6 @@ spring:
   flyway:
     enabled: true
     clean-disabled: false
-    locations: classpath:db/migration/h2
 
 app:
   db:

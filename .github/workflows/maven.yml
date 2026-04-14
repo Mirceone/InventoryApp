@@ -1,4 +1,5 @@
 # Build + teste Maven pe push/PR către main.
+# Testele de integrare folosesc PostgreSQL (serviciu in job).
 # https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-maven
 
 name: Java CI with Maven
@@ -16,6 +17,26 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: inventoryapp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d inventoryapp_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DB_URL: jdbc:postgresql://postgres:5432/inventoryapp_test
+      TEST_DB_USERNAME: test
+      TEST_DB_PASSWORD: test
 
     steps:
       - uses: actions/checkout@v4
