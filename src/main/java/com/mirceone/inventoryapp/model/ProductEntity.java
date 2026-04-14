@@ -43,6 +43,13 @@ public class ProductEntity {
     @Column(name = "reorder_threshold")
     private Integer reorderThreshold;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "category_id", nullable = false)
+    private CategoryEntity category;
+
+    @Column(name = "img_url", length = 2048)
+    private String imgUrl;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -52,17 +59,15 @@ public class ProductEntity {
     protected ProductEntity() {
     }
 
-    public ProductEntity(UUID firmId, String name, String sku, int currentQuantity) {
-        this(firmId, name, sku, currentQuantity, true, null);
-    }
-
     public ProductEntity(
             UUID firmId,
             String name,
             String sku,
             int currentQuantity,
             boolean reorderEnabled,
-            Integer reorderThreshold
+            Integer reorderThreshold,
+            CategoryEntity category,
+            String imgUrl
     ) {
         this.firmId = firmId;
         this.name = name;
@@ -70,6 +75,8 @@ public class ProductEntity {
         this.currentQuantity = currentQuantity;
         this.reorderEnabled = reorderEnabled;
         this.reorderThreshold = reorderThreshold;
+        this.category = category;
+        this.imgUrl = imgUrl;
     }
 
     @PrePersist
@@ -130,5 +137,21 @@ public class ProductEntity {
 
     public void setReorderThreshold(Integer reorderThreshold) {
         this.reorderThreshold = reorderThreshold;
+    }
+
+    public CategoryEntity getCategory() {
+        return category;
+    }
+
+    public void setCategory(CategoryEntity category) {
+        this.category = category;
+    }
+
+    public String getImgUrl() {
+        return imgUrl;
+    }
+
+    public void setImgUrl(String imgUrl) {
+        this.imgUrl = imgUrl;
     }
 }

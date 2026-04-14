@@ -1,35 +1,43 @@
 package com.mirceone.inventoryapp.service;
 
 import com.mirceone.inventoryapp.api.inventory.*;
+import com.mirceone.inventoryapp.model.CategoryConstants;
+import com.mirceone.inventoryapp.model.CategoryEntity;
 import com.mirceone.inventoryapp.model.ProductEntity;
 import com.mirceone.inventoryapp.model.StockChangeEventEntity;
 import com.mirceone.inventoryapp.model.StockChangeType;
+import com.mirceone.inventoryapp.repository.CategoryRepository;
 import com.mirceone.inventoryapp.repository.ProductRepository;
 import com.mirceone.inventoryapp.repository.StockChangeEventRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.UUID;
 
 @Service
+@Transactional
 public class InventoryService {
 
     private final ProductRepository productRepository;
     private final StockChangeEventRepository stockChangeEventRepository;
+    private final CategoryRepository categoryRepository;
     private final FirmService firmService;
     private final int defaultReorderThreshold;
 
     public InventoryService(
             ProductRepository productRepository,
             StockChangeEventRepository stockChangeEventRepository,
+            CategoryRepository categoryRepository,
             FirmService firmService,
             @Value("${app.inventory.default-reorder-threshold:4}") int defaultReorderThreshold
     ) {
         this.productRepository = productRepository;
         this.stockChangeEventRepository = stockChangeEventRepository;
+        this.categoryRepository = categoryRepository;
         this.firmService = firmService;
         this.defaultReorderThreshold = defaultReorderThreshold;
     }
@@ -38,13 +46,16 @@ public class InventoryService {
         firmService.assertUserIsMember(firmId, userId);
 
         boolean reorderEnabled = request.reorderEnabled() != null ? request.reorderEnabled() : true;
+        CategoryEntity category = resolveCategory(firmId, request.categoryId());
         ProductEntity product = new ProductEntity(
                 firmId,
                 request.name(),
                 request.sku(),
                 request.initialQuantity(),
                 reorderEnabled,
-                request.reorderThreshold()
+                request.reorderThreshold(),
+                category,
+                normalizeImgUrl(request.imgUrl())
         );
         product = productRepository.save(product);
 
@@ -53,7 +64,8 @@ public class InventoryService {
 
     public ProductResponse updateProduct(UUID userId, UUID firmId, UUID productId, UpdateProductRequest request) {
         firmService.assertUserIsMember(firmId, userId);
-        if (request.name() == null && request.sku() == null && request.reorderEnabled() == null && request.reorderThreshold() == null) {
+        if (request.name() == null && request.sku() == null && request.reorderEnabled() == null && request.reorderThreshold() == null
+                && request.categoryId() == null && request.imgUrl() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No fields to update");
         }
 
@@ -71,6 +83,12 @@ public class InventoryService {
         }
         if (request.reorderThreshold() != null) {
             product.setReorderThreshold(request.reorderThreshold());
+        }
+        if (request.categoryId() != null) {
+            product.setCategory(resolveCategory(firmId, request.categoryId()));
+        }
+        if (request.imgUrl() != null) {
+            product.setImgUrl(normalizeImgUrl(request.imgUrl()));
         }
 
         product = productRepository.save(product);
@@ -149,27 +167,53 @@ public class InventoryService {
     }
 
     private ProductResponse toResponse(ProductEntity product) {
+        CategoryEntity c = product.getCategory();
         return new ProductResponse(
                 product.getId(),
                 product.getName(),
                 product.getSku(),
                 product.getCurrentQuantity(),
                 product.isReorderEnabled(),
-                product.getReorderThreshold()
+                product.getReorderThreshold(),
+                c.getId(),
+                c.getName(),
+                product.getImgUrl()
         );
     }
 
     private BuyListItemResponse toBuyListItem(ProductEntity product) {
         int effective = effectiveMinThreshold(product);
         int shortfall = effective - product.getCurrentQuantity();
+        CategoryEntity c = product.getCategory();
         return new BuyListItemResponse(
                 product.getId(),
                 product.getName(),
                 product.getSku(),
                 product.getCurrentQuantity(),
                 effective,
-                shortfall
+                shortfall,
+                c.getId(),
+                c.getName()
         );
+    }
+
+    private CategoryEntity resolveCategory(UUID firmId, UUID categoryId) {
+        if (categoryId == null) {
+            return categoryRepository.findByFirmIdAndName(firmId, CategoryConstants.DEFAULT_CATEGORY_NAME)
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.INTERNAL_SERVER_ERROR,
+                            "Default category not found for firm"
+                    ));
+        }
+        return categoryRepository.findByIdAndFirmId(categoryId, firmId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
+    }
+
+    private static String normalizeImgUrl(String imgUrl) {
+        if (imgUrl == null || imgUrl.isBlank()) {
+            return null;
+        }
+        return imgUrl.strip();
     }
 
     int effectiveMinThreshold(ProductEntity product) {

@@ -9,6 +9,9 @@ public record ProductResponse(
         int currentQuantity,
         boolean reorderEnabled,
         /** Explicit threshold, or null to use application default. */
-        Integer reorderThreshold
+        Integer reorderThreshold,
+        UUID categoryId,
+        String categoryName,
+        String imgUrl
 ) {
 }

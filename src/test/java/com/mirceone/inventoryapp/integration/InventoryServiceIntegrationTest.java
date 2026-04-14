@@ -51,7 +51,7 @@ class InventoryServiceIntegrationTest extends IntegrationTestBase {
         ProductResponse created = inventoryService.createProduct(
                 userId,
                 firm.id(),
-                new CreateProductRequest("Keyboard", "KB-IT", 10, null, null)
+                new CreateProductRequest("Keyboard", "KB-IT", 10, null, null, null, null)
         );
 
         inventoryService.setStock(userId, firm.id(), created.id(), new SetStockRequest(25));
@@ -84,17 +84,17 @@ class InventoryServiceIntegrationTest extends IntegrationTestBase {
         ProductResponse okStock = inventoryService.createProduct(
                 userId,
                 firm.id(),
-                new CreateProductRequest("InStock", "OK-1", 10, true, null)
+                new CreateProductRequest("InStock", "OK-1", 10, true, null, null, null)
         );
         ProductResponse lowStock = inventoryService.createProduct(
                 userId,
                 firm.id(),
-                new CreateProductRequest("Low", "LOW-1", 2, true, null)
+                new CreateProductRequest("Low", "LOW-1", 2, true, null, null, null)
         );
         inventoryService.createProduct(
                 userId,
                 firm.id(),
-                new CreateProductRequest("Disabled", "OFF-1", 1, false, null)
+                new CreateProductRequest("Disabled", "OFF-1", 1, false, null, null, null)
         );
 
         List<BuyListItemResponse> buyList = inventoryService.listBuyList(userId, firm.id());

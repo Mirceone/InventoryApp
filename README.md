@@ -22,7 +22,7 @@ Contine codul Java principal al aplicatiei.
 Contine configurari si migrari SQL.
 
 - `application.yml` - configuratia aplicatiei (datasource, Flyway, JWT etc.).
-- `db/migration/` - migrari Flyway (`V1` … `V6`).
+- `db/migration/` - migrari Flyway (`V1` … `V7`).
 
 ## Rolul directoarelor si claselor principale
 
@@ -55,12 +55,15 @@ DTO-uri relevante:
 - Listare firme pentru utilizatorul curent
 
 #### `api/inventory/ProductController`
-- Creare produs (prag reaprovizionare optional; implicit din `app.inventory.default-reorder-threshold`)
+- Creare produs (categorie optionala — implicit `Misc`; `imgUrl` optional; prag reaprovizionare optional)
 - Listare produse per firma
 - `GET .../products/buy-list` — produse cu stoc sub pragul efectiv (lista de cumparaturi / restock)
-- `PATCH .../products/{productId}` — actualizare partiala (nume, SKU, prag reaprovizionare)
+- `PATCH .../products/{productId}` — actualizare partiala (nume, SKU, categorie, imagine, prag reaprovizionare)
 - Setare stoc
 - Ajustare stoc
+
+#### `api/inventory/CategoryController`
+- `GET .../categories` — categorii pentru firma (include intotdeauna categoria implicita `Misc`)
 
 #### `api/HealthController`
 - `GET /health` pentru health-check simplu.
@@ -94,8 +97,13 @@ DTO-uri relevante:
 
 #### `service/FirmService`
 - Creare firma.
+- La creare firma se creeaza automat categoria implicita `Misc` pentru produse fara categorie specificata.
 - Listare firme ale userului.
 - Verificare apartenenta userului la firma.
+
+#### `service/CategoryService`
+- Asigura existenta categoriei `Misc` pentru o firma noua.
+- Listare categorii pentru membrii firmei.
 
 #### `service/InventoryService`
 - Operatii pe produse/stoc.
@@ -110,6 +118,7 @@ Clase principale:
 - `FirmRepository`
 - `FirmMemberRepository`
 - `ProductRepository`
+- `CategoryRepository`
 
 Acestea folosesc Spring Data JPA pentru query-uri si CRUD.
 
@@ -120,6 +129,7 @@ Entitati principale:
 - `FirmEntity`
 - `FirmMemberEntity`
 - `ProductEntity`
+- `CategoryEntity`
 - `RefreshTokenEntity`
 - `StockChangeEventEntity`
 
@@ -160,6 +170,7 @@ Autentificarea curenta este bazata pe **email/parola + JWT Bearer token + refres
 - Migrarea `V4` adauga tabela `refresh_tokens`.
 - Migrarea `V5` adauga tabela `stock_change_events`.
 - Migrarea `V6` adauga pe `products` coloanele `reorder_enabled` si `reorder_threshold` (prag minim pentru reaprovizionare).
+- Migrarea `V7` adauga tabela `categories` (per firma, nume unic), `products.category_id` si `products.img_url`.
 
 ## Configurare locala
 
@@ -232,9 +243,9 @@ Suita de teste acopera atat logica de business (service), cat si contractele HTT
   - creare/listare produse, `buy-list`, `PATCH` produs, setare/ajustare stoc
   - payload invalid, eroare de business si acces fara token (`401`)
 - **Integration tests (DB-backed, PostgreSQL local)**
-  - Flyway migration checks (`V1..V6`, tabele esentiale)
+  - Flyway migration checks (`V1..V7`, tabele esentiale)
   - end-to-end pentru flow-uri `AuthService` (signup/refresh/logout/logout-all)
   - end-to-end pentru `InventoryService` + audit trail in `stock_change_events`
   - profil Spring `test` + baza dedicata (ex. `inventoryapp_test`), aceleasi migrari ca in productie; la fiecare pornire a contextului de test, Flyway ruleaza `clean` apoi `migrate` (vezi `application-test.yml` si `IntegrationTestFlywayConfig`)
 
-La momentul actual, suita ruleaza cu succes (`BUILD SUCCESS`) si include **47 de teste**.
+La momentul actual, suita ruleaza cu succes (`BUILD SUCCESS`) si include **48 de teste**.

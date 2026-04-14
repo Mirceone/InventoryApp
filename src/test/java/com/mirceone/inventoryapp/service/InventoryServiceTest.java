@@ -6,7 +6,10 @@ import com.mirceone.inventoryapp.api.inventory.CreateProductRequest;
 import com.mirceone.inventoryapp.api.inventory.ProductResponse;
 import com.mirceone.inventoryapp.api.inventory.SetStockRequest;
 import com.mirceone.inventoryapp.api.inventory.UpdateProductRequest;
+import com.mirceone.inventoryapp.model.CategoryConstants;
+import com.mirceone.inventoryapp.model.CategoryEntity;
 import com.mirceone.inventoryapp.model.ProductEntity;
+import com.mirceone.inventoryapp.repository.CategoryRepository;
 import com.mirceone.inventoryapp.repository.ProductRepository;
 import com.mirceone.inventoryapp.repository.StockChangeEventRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,22 +38,32 @@ class InventoryServiceTest {
     @Mock
     private StockChangeEventRepository stockChangeEventRepository;
     @Mock
+    private CategoryRepository categoryRepository;
+    @Mock
     private FirmService firmService;
 
     private InventoryService inventoryService;
 
     @BeforeEach
     void setUp() {
-        inventoryService = new InventoryService(productRepository, stockChangeEventRepository, firmService, 4);
+        inventoryService = new InventoryService(
+                productRepository,
+                stockChangeEventRepository,
+                categoryRepository,
+                firmService,
+                4
+        );
     }
 
     @Test
     void createProductReturnsCreatedProduct() {
         UUID userId = UUID.randomUUID();
         UUID firmId = UUID.randomUUID();
-        CreateProductRequest request = new CreateProductRequest("Laptop", "SKU-1", 10, null, null);
-        ProductEntity saved = new ProductEntity(firmId, "Laptop", "SKU-1", 10);
+        CreateProductRequest request = new CreateProductRequest("Laptop", "SKU-1", 10, null, null, null, null);
+        CategoryEntity misc = new CategoryEntity(firmId, "Misc");
+        ProductEntity saved = new ProductEntity(firmId, "Laptop", "SKU-1", 10, true, null, misc, null);
 
+        when(categoryRepository.findByFirmIdAndName(firmId, CategoryConstants.DEFAULT_CATEGORY_NAME)).thenReturn(Optional.of(misc));
         when(productRepository.save(any(ProductEntity.class))).thenReturn(saved);
 
         ProductResponse response = inventoryService.createProduct(userId, firmId, request);
@@ -79,7 +92,8 @@ class InventoryServiceTest {
         UUID userId = UUID.randomUUID();
         UUID firmId = UUID.randomUUID();
         UUID productId = UUID.randomUUID();
-        ProductEntity product = new ProductEntity(firmId, "Mouse", "SKU-2", 1);
+        CategoryEntity misc = new CategoryEntity(firmId, "Misc");
+        ProductEntity product = new ProductEntity(firmId, "Mouse", "SKU-2", 1, true, null, misc, null);
 
         when(productRepository.findByIdAndFirmId(productId, firmId)).thenReturn(Optional.of(product));
 
@@ -95,7 +109,8 @@ class InventoryServiceTest {
         UUID userId = UUID.randomUUID();
         UUID firmId = UUID.randomUUID();
         UUID productId = UUID.randomUUID();
-        ProductEntity product = new ProductEntity(firmId, "Keyboard", "KB-1", 10);
+        CategoryEntity misc = new CategoryEntity(firmId, "Misc");
+        ProductEntity product = new ProductEntity(firmId, "Keyboard", "KB-1", 10, true, null, misc, null);
 
         when(productRepository.findByIdAndFirmId(productId, firmId)).thenReturn(Optional.of(product));
         when(productRepository.save(any(ProductEntity.class))).thenReturn(product);
@@ -110,7 +125,8 @@ class InventoryServiceTest {
         UUID userId = UUID.randomUUID();
         UUID firmId = UUID.randomUUID();
         UUID productId = UUID.randomUUID();
-        ProductEntity product = new ProductEntity(firmId, "Mouse", "MS-1", 10);
+        CategoryEntity misc = new CategoryEntity(firmId, "Misc");
+        ProductEntity product = new ProductEntity(firmId, "Mouse", "MS-1", 10, true, null, misc, null);
 
         when(productRepository.findByIdAndFirmId(productId, firmId)).thenReturn(Optional.of(product));
         when(productRepository.save(any(ProductEntity.class))).thenReturn(product);
@@ -124,8 +140,8 @@ class InventoryServiceTest {
     void listBuyListReturnsProductsBelowThreshold() {
         UUID userId = UUID.randomUUID();
         UUID firmId = UUID.randomUUID();
-        UUID lowId = UUID.randomUUID();
-        ProductEntity low = new ProductEntity(firmId, "Low", "L-1", 2, true, null);
+        CategoryEntity misc = new CategoryEntity(firmId, "Misc");
+        ProductEntity low = new ProductEntity(firmId, "Low", "L-1", 2, true, null, misc, null);
         when(productRepository.findNeedingRestock(firmId, 4)).thenReturn(List.of(low));
 
         List<BuyListItemResponse> list = inventoryService.listBuyList(userId, firmId);
@@ -138,13 +154,15 @@ class InventoryServiceTest {
 
     @Test
     void effectiveMinThresholdUsesProductOverride() {
-        ProductEntity p = new ProductEntity(UUID.randomUUID(), "P", "S", 0, true, 10);
+        CategoryEntity c = new CategoryEntity(UUID.randomUUID(), "Misc");
+        ProductEntity p = new ProductEntity(UUID.randomUUID(), "P", "S", 0, true, 10, c, null);
         assertEquals(10, inventoryService.effectiveMinThreshold(p));
     }
 
     @Test
     void effectiveMinThresholdUsesDefaultWhenNull() {
-        ProductEntity p = new ProductEntity(UUID.randomUUID(), "P", "S", 0, true, null);
+        CategoryEntity c = new CategoryEntity(UUID.randomUUID(), "Misc");
+        ProductEntity p = new ProductEntity(UUID.randomUUID(), "P", "S", 0, true, null, c, null);
         assertEquals(4, inventoryService.effectiveMinThreshold(p));
     }
 
@@ -157,7 +175,7 @@ class InventoryServiceTest {
         ResponseStatusException ex = assertThrows(
                 ResponseStatusException.class,
                 () -> inventoryService.updateProduct(userId, firmId, productId,
-                        new UpdateProductRequest(null, null, null, null))
+                        new UpdateProductRequest(null, null, null, null, null, null))
         );
         assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
     }

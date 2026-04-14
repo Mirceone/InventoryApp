@@ -21,10 +21,16 @@ public class FirmService {
 
     private final FirmRepository firmRepository;
     private final FirmMemberRepository firmMemberRepository;
+    private final CategoryService categoryService;
 
-    public FirmService(FirmRepository firmRepository, FirmMemberRepository firmMemberRepository) {
+    public FirmService(
+            FirmRepository firmRepository,
+            FirmMemberRepository firmMemberRepository,
+            CategoryService categoryService
+    ) {
         this.firmRepository = firmRepository;
         this.firmMemberRepository = firmMemberRepository;
+        this.categoryService = categoryService;
     }
 
     public FirmResponse createFirm(UUID userId, CreateFirmRequest request) {
@@ -33,6 +39,8 @@ public class FirmService {
 
         FirmMemberEntity member = new FirmMemberEntity(firm.getId(), userId, MemberRole.OWNER);
         firmMemberRepository.save(member);
+
+        categoryService.ensureDefaultCategoryForFirm(firm.getId());
 
         return new FirmResponse(firm.getId(), firm.getName());
     }

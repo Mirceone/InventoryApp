@@ -35,11 +35,11 @@ class FlywayIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
-    void flywaySchemaHistoryIsAppliedUpToV6() {
+    void flywaySchemaHistoryIsAppliedUpToV7() {
         Integer maxVersion = jdbcTemplate.queryForObject(
                 "select max(cast(version as integer)) from flyway_schema_history where success = true",
                 Integer.class
         );
-        assertTrue(maxVersion != null && maxVersion >= 6);
+        assertTrue(maxVersion != null && maxVersion >= 7);
     }
 }

@@ -9,6 +9,8 @@ public record BuyListItemResponse(
         int currentQuantity,
         int effectiveMinThreshold,
         /** Units needed to reach the minimum (min minus current). */
-        int shortfall
+        int shortfall,
+        UUID categoryId,
+        String categoryName
 ) {
 }
