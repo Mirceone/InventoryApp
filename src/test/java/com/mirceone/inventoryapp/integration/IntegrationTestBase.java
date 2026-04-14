@@ -4,11 +4,11 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
 /**
- * Baza pentru teste de integrare pe PostgreSQL real (fara Testcontainers).
+ * Baza pentru teste de integrare pe PostgreSQL (baza dedicata, ex. {@code inventoryapp_test}).
+ * Migrarile Flyway sunt cele din productie ({@code src/main/resources/db/migration}).
  * <p>
- * Config: {@code src/test/resources/application-test.yml} — baza dedicata testelor
- * (ex. {@code inventoryapp_test}), aceleasi migrari Flyway ca in productie.
  * La startup (profil {@code test}), Flyway ruleaza {@code clean} apoi {@code migrate}.
+ * Nu folosi baza de productie pentru teste.
  * </p>
  */
 @ActiveProfiles("test")

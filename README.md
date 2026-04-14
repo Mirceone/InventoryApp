@@ -208,17 +208,13 @@ Dupa pornirea aplicatiei, documentatia OpenAPI este disponibila la:
 ./mvnw test
 ```
 
-### Teste de integrare (PostgreSQL local)
+### Teste de integrare (H2 in-memory)
 
-Nu folosesc Docker. Trebuie un server PostgreSQL accesibil si o **baza separata** pentru teste (aceleasi migrari Flyway ca in productie). O data, creaza baza (exemplu):
+Profilul `test` foloseste **H2 in-memory** (`application-test.yml`), astfel incat `./mvnw test` si CI (ex. GitHub Actions) **nu** cer PostgreSQL pornit local.
 
-```sql
-CREATE DATABASE inventoryapp_test;
-```
+Migrarile Flyway pentru test sunt in `src/test/resources/db/migration/h2/` (versiuni `V1`..`V7` echivalente logic cu PostgreSQL din `src/main/resources/db/migration/`, dar fara `pgcrypto` / sintaxa specifica PG care H2 nu suporta).
 
-URL-ul implicit din `src/test/resources/application-test.yml` este `jdbc:postgresql://localhost:5432/inventoryapp_test`. Poti suprascrie cu `TEST_DB_URL`, `TEST_DB_USERNAME`, `TEST_DB_PASSWORD`.
-
-La fiecare pornire a contextului Spring cu profilul `test`, Flyway executa `clean()` apoi `migrate()` — schema de test este recreata din migrari (nu se foloseste baza de productie).
+La fiecare pornire a contextului Spring cu profilul `test`, Flyway executa `clean()` apoi `migrate()` pe H2 — schema de test este recreata din aceste migrari (nu se foloseste baza de productie).
 
 ### Rezumat implementari teste
 
@@ -242,10 +238,10 @@ Suita de teste acopera atat logica de business (service), cat si contractele HTT
 - **Product controller (MockMvc)**
   - creare/listare produse, `buy-list`, `PATCH` produs, setare/ajustare stoc
   - payload invalid, eroare de business si acces fara token (`401`)
-- **Integration tests (DB-backed, PostgreSQL local)**
+- **Integration tests (DB-backed, H2)**
   - Flyway migration checks (`V1..V7`, tabele esentiale)
   - end-to-end pentru flow-uri `AuthService` (signup/refresh/logout/logout-all)
   - end-to-end pentru `InventoryService` + audit trail in `stock_change_events`
-  - profil Spring `test` + baza dedicata (ex. `inventoryapp_test`), aceleasi migrari ca in productie; la fiecare pornire a contextului de test, Flyway ruleaza `clean` apoi `migrate` (vezi `application-test.yml` si `IntegrationTestFlywayConfig`)
+  - profil Spring `test` + H2; Flyway ruleaza `clean` apoi `migrate` din `db/migration/h2` (vezi `application-test.yml` si `IntegrationTestFlywayConfig`)
 
-La momentul actual, suita ruleaza cu succes (`BUILD SUCCESS`) si include **48 de teste**.
+La momentul actual, suita ruleaza cu succes (`BUILD SUCCESS`) si include **54 de teste**.

@@ -1,9 +1,8 @@
-# Profil pentru teste de integrare: aceeasi migrari Flyway ca in productie,
-# baza de date separata (ex. inventoryapp_test). Creeaza baza o data in Postgres:
-#   CREATE DATABASE inventoryapp_test;
+# Profil test: PostgreSQL dedicat (local + CI). Aceleasi migrari Flyway ca in productie
+# (classpath:db/migration din src/main/resources). La startup: clean + migrate (vezi IntegrationTestFlywayConfig).
 #
-# Variabile optionale: TEST_DB_URL, TEST_DB_USERNAME, TEST_DB_PASSWORD
-# (fallback la DB_USERNAME / DB_PASSWORD din mediul local sau valorile de mai jos)
+# Local: creeaza o data baza, ex. CREATE DATABASE inventoryapp_test;
+# Variabile: TEST_DB_URL, TEST_DB_USERNAME, TEST_DB_PASSWORD
 
 spring:
   datasource:
@@ -11,9 +10,13 @@ spring:
     username: ${TEST_DB_USERNAME:${DB_USERNAME:mirceone}}
     password: ${TEST_DB_PASSWORD:${DB_PASSWORD:postgres}}
 
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
   flyway:
     enabled: true
-    # Necesar pentru strategia clean+migrate din IntegrationTestFlywayConfig
     clean-disabled: false
 
 app:
