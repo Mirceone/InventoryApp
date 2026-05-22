@@ -6,6 +6,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -19,11 +20,16 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
 
     private static final String LOGIN_PATH = "/auth/login";
     private static final String REFRESH_PATH = "/auth/refresh";
+    private static final String FORGOT_PASSWORD_PATH = "/auth/forgot-password";
+    private static final String RESET_PASSWORD_PATH = "/auth/reset-password";
 
     private final AuthRateLimiter authRateLimiter;
     private final ObjectMapper objectMapper;
 
-    public AuthRateLimitFilter(AuthRateLimiter authRateLimiter, ObjectMapper objectMapper) {
+    public AuthRateLimitFilter(
+            @Qualifier("authRateLimiter") AuthRateLimiter authRateLimiter,
+            ObjectMapper objectMapper
+    ) {
         this.authRateLimiter = authRateLimiter;
         this.objectMapper = objectMapper;
     }
@@ -46,7 +52,10 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             return false;
         }
         String uri = request.getRequestURI();
-        return LOGIN_PATH.equals(uri) || REFRESH_PATH.equals(uri);
+        return LOGIN_PATH.equals(uri)
+                || REFRESH_PATH.equals(uri)
+                || FORGOT_PASSWORD_PATH.equals(uri)
+                || RESET_PASSWORD_PATH.equals(uri);
     }
 
     private void writeTooManyRequestsResponse(HttpServletRequest request, HttpServletResponse response) throws IOException {

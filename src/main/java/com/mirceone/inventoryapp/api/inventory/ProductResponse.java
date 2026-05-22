@@ -12,6 +12,7 @@ public record ProductResponse(
         Integer reorderThreshold,
         UUID categoryId,
         String categoryName,
-        String imgUrl
+        String imgUrl,
+        UUID preferredRouteStopId
 ) {
 }

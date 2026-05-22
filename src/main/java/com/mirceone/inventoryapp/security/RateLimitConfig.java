@@ -7,10 +7,18 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class RateLimitConfig {
 
-    @Bean
+    @Bean(name = "authRateLimiter")
     public AuthRateLimiter authRateLimiter(
             @Value("${app.security.rate-limit.auth.max-requests:20}") int maxRequests,
             @Value("${app.security.rate-limit.auth.window-seconds:60}") long windowSeconds
+    ) {
+        return new AuthRateLimiter(maxRequests, windowSeconds);
+    }
+
+    @Bean(name = "documentUploadRateLimiter")
+    public AuthRateLimiter documentUploadRateLimiter(
+            @Value("${app.security.rate-limit.documents.max-requests:30}") int maxRequests,
+            @Value("${app.security.rate-limit.documents.window-seconds:60}") long windowSeconds
     ) {
         return new AuthRateLimiter(maxRequests, windowSeconds);
     }

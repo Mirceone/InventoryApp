@@ -50,6 +50,12 @@ public class ProductEntity {
     @Column(name = "img_url", length = 2048)
     private String imgUrl;
 
+    /**
+     * Optional preferred pickup / shopping stop for routing buy-list items.
+     */
+    @Column(name = "preferred_route_stop_id")
+    private UUID preferredRouteStopId;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -67,7 +73,8 @@ public class ProductEntity {
             boolean reorderEnabled,
             Integer reorderThreshold,
             CategoryEntity category,
-            String imgUrl
+            String imgUrl,
+            UUID preferredRouteStopId
     ) {
         this.firmId = firmId;
         this.name = name;
@@ -77,6 +84,7 @@ public class ProductEntity {
         this.reorderThreshold = reorderThreshold;
         this.category = category;
         this.imgUrl = imgUrl;
+        this.preferredRouteStopId = preferredRouteStopId;
     }
 
     @PrePersist
@@ -153,5 +161,13 @@ public class ProductEntity {
 
     public void setImgUrl(String imgUrl) {
         this.imgUrl = imgUrl;
+    }
+
+    public UUID getPreferredRouteStopId() {
+        return preferredRouteStopId;
+    }
+
+    public void setPreferredRouteStopId(UUID preferredRouteStopId) {
+        this.preferredRouteStopId = preferredRouteStopId;
     }
 }

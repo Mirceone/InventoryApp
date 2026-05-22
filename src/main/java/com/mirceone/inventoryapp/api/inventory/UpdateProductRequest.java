@@ -15,6 +15,9 @@ public record UpdateProductRequest(
         @Min(0) Integer reorderThreshold,
         UUID categoryId,
         /** Set to empty string to clear the image URL. */
-        @Size(max = 2048) String imgUrl
+        @Size(max = 2048) String imgUrl,
+        UUID preferredRouteStopId,
+        /** When true, clears {@code preferredRouteStopId}. */
+        Boolean clearPreferredRouteStop
 ) {
 }

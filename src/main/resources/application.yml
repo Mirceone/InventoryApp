@@ -5,6 +5,11 @@ spring:
   application:
     name: InventoryApp
 
+  servlet:
+    multipart:
+      max-file-size: ${APP_STORAGE_MAX_FILE_SIZE:1GB}
+      max-request-size: ${APP_STORAGE_MAX_REQUEST_SIZE:3GB}
+
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/inventoryapp}
     username: ${DB_USERNAME:mirceone}
@@ -22,6 +27,12 @@ logging:
   level:
     org.springframework.web: INFO
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
 app:
   jwt:
     # În lipsa unui secret explicit, aplicația va genera unul la startup (doar pentru demo local).
@@ -35,6 +46,9 @@ app:
       auth:
         max-requests: ${APP_SECURITY_RATE_LIMIT_AUTH_MAX_REQUESTS:20}
         window-seconds: ${APP_SECURITY_RATE_LIMIT_AUTH_WINDOW_SECONDS:60}
+      documents:
+        max-requests: ${APP_SECURITY_RATE_LIMIT_DOCUMENTS_MAX_REQUESTS:30}
+        window-seconds: ${APP_SECURITY_RATE_LIMIT_DOCUMENTS_WINDOW_SECONDS:60}
     cors:
       allowed-origins: ${APP_SECURITY_CORS_ALLOWED_ORIGINS:http://localhost:5173}
 
@@ -43,3 +57,45 @@ app:
 
   inventory:
     default-reorder-threshold: ${APP_DEFAULT_REORDER_THRESHOLD:4}
+
+  frontend-url: ${APP_FRONTEND_URL:http://localhost:5173}
+
+  password-reset:
+    token-ttl-seconds: ${APP_PASSWORD_RESET_TOKEN_TTL_SECONDS:1800}
+
+  email:
+    resend:
+      api-key: ${RESEND_API_KEY:}
+      from: ${RESEND_FROM:InventoryApp <onboarding@resend.dev>}
+
+  features:
+    routes-enabled: ${APP_FEATURES_ROUTES:true}
+    dossier-enabled: ${APP_FEATURES_DOSSIER:true}
+    dossier-ai-enabled: ${APP_FEATURES_DOSSIER_AI:true}
+    ops-enabled: ${APP_FEATURES_OPS:true}
+
+  ollama:
+    base-url: ${APP_OLLAMA_BASE_URL:http://127.0.0.1:11434}
+    model: ${APP_OLLAMA_MODEL:gemma4:e4b}
+    chat-timeout: ${APP_OLLAMA_CHAT_TIMEOUT:120s}
+    send-document-content: ${APP_OLLAMA_SEND_DOCUMENT_CONTENT:false}
+    max-content-chars: ${APP_OLLAMA_MAX_CONTENT_CHARS:8000}
+
+  documents:
+    page-max-size: ${APP_DOCUMENTS_PAGE_MAX_SIZE:100}
+    batch-max-files: ${APP_DOCUMENTS_BATCH_MAX_FILES:50}
+    batch-max-total-bytes: ${APP_DOCUMENTS_BATCH_MAX_TOTAL_BYTES:3221225472}
+    organization-poll-interval: ${APP_DOCUMENTS_ORGANIZATION_POLL_INTERVAL:2s}
+    ai-subfolders-enabled: ${APP_DOCUMENTS_AI_SUBFOLDERS:true}
+    organization-batch-size: ${APP_DOCUMENTS_ORGANIZATION_BATCH_SIZE:20}
+
+  storage:
+    root: ${APP_STORAGE_ROOT:${user.home}/.inventoryapp/uploads}
+    max-file-size-bytes: ${APP_STORAGE_MAX_FILE_SIZE_BYTES:1073741824}
+    # Non-empty list: only these MIME types (prefix match, e.g. image/). Empty = allow any.
+    allowed-mime-prefixes: []
+
+  ops:
+    api-key: ${APP_OPS_API_KEY:}
+    log-ring-max-lines: ${APP_OPS_LOG_RING_MAX_LINES:500}
+    log-ring-enabled: ${APP_OPS_LOG_RING_ENABLED:true}

@@ -4,6 +4,11 @@ import java.util.UUID;
 
 public record FirmResponse(
         UUID id,
-        String name
+        String name,
+        String role,
+        String roleDisplayLabel,
+        String status,
+        String statusDisplayLabel,
+        String statusMessage
 ) {
 }

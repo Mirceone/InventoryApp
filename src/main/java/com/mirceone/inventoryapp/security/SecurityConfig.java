@@ -17,13 +17,16 @@ import java.util.List;
 @Configuration
 public class SecurityConfig {
 
+    private final DocumentUploadRateLimitFilter documentUploadRateLimitFilter;
     private final AuthRateLimitFilter authRateLimitFilter;
     private final List<String> allowedOrigins;
 
     public SecurityConfig(
+            DocumentUploadRateLimitFilter documentUploadRateLimitFilter,
             AuthRateLimitFilter authRateLimitFilter,
             @Value("${app.security.cors.allowed-origins:http://localhost:5173}") List<String> allowedOrigins
     ) {
+        this.documentUploadRateLimitFilter = documentUploadRateLimitFilter;
         this.authRateLimitFilter = authRateLimitFilter;
         this.allowedOrigins = allowedOrigins;
     }
@@ -39,6 +42,7 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 );
         http.addFilterBefore(authRateLimitFilter, UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(documentUploadRateLimitFilter, AuthRateLimitFilter.class);
 
         // Validează Bearer token-ul JWT și îl pune în SecurityContext.
         http.oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));

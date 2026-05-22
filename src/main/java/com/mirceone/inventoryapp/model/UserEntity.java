@@ -81,6 +81,10 @@ public class UserEntity {
         return passwordHash;
     }
 
+    public void setPasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
+
     public ProviderType getProvider() {
         return provider;
     }

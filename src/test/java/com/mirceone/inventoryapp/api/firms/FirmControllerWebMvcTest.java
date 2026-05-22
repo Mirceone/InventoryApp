@@ -1,10 +1,14 @@
 package com.mirceone.inventoryapp.api.firms;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mirceone.inventoryapp.model.FirmStatus;
+import com.mirceone.inventoryapp.model.MemberRole;
 import com.mirceone.inventoryapp.security.AuthRateLimiter;
-import com.mirceone.inventoryapp.service.FirmService;
+import com.mirceone.inventoryapp.service.firms.FirmContracts;
+import com.mirceone.inventoryapp.service.firms.FirmService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
@@ -17,7 +21,9 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -35,63 +41,86 @@ class FirmControllerWebMvcTest {
     private FirmService firmService;
 
     @MockitoBean
+    @Qualifier("authRateLimiter")
     private AuthRateLimiter authRateLimiter;
+
+    @MockitoBean
+    @Qualifier("documentUploadRateLimiter")
+    private AuthRateLimiter documentUploadRateLimiter;
+
+    private static FirmContracts.FirmSummary summary(
+            UUID id, String name, MemberRole role, FirmStatus status, String statusMessage
+    ) {
+        String roleLabel = role == MemberRole.OWNER ? "Admin" : "Angajat";
+        String statusLabel = switch (status) {
+            case ACTIVE -> "Activ";
+            case PAUSED -> "În pauză";
+            case CRITICAL -> "Critic";
+        };
+        return new FirmContracts.FirmSummary(id, name, role, roleLabel, status, statusLabel, statusMessage);
+    }
 
     @Test
     void createFirmReturnsCreatedFirm() throws Exception {
         UUID userId = UUID.randomUUID();
         UUID firmId = UUID.randomUUID();
-        CreateFirmRequest request = new CreateFirmRequest("Demo SRL");
-        FirmResponse response = new FirmResponse(firmId, "Demo SRL");
 
-        when(firmService.createFirm(eq(userId), any(CreateFirmRequest.class))).thenReturn(response);
+        when(firmService.createFirm(eq(userId), any(FirmContracts.CreateFirmSpec.class)))
+                .thenReturn(summary(firmId, "Demo SRL", MemberRole.OWNER, FirmStatus.ACTIVE, null));
 
         mockMvc.perform(post("/firms")
                         .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt -> jwt.subject(userId.toString())))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(objectMapper.writeValueAsString(new CreateFirmRequest("Demo SRL"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(firmId.toString()))
-                .andExpect(jsonPath("$.name").value("Demo SRL"));
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.statusDisplayLabel").value("Activ"));
     }
 
     @Test
-    void listFirmsReturnsUserFirms() throws Exception {
+    void listFirmsReturnsStatusFields() throws Exception {
         UUID userId = UUID.randomUUID();
         UUID firmId1 = UUID.randomUUID();
         UUID firmId2 = UUID.randomUUID();
 
         when(firmService.getFirmsForUser(userId)).thenReturn(List.of(
-                new FirmResponse(firmId1, "Firm One"),
-                new FirmResponse(firmId2, "Firm Two")
+                summary(firmId1, "Firm One", MemberRole.OWNER, FirmStatus.ACTIVE, null),
+                summary(firmId2, "Firm Two", MemberRole.MEMBER, FirmStatus.PAUSED, null)
         ));
 
         mockMvc.perform(get("/firms")
                         .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt -> jwt.subject(userId.toString()))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(firmId1.toString()))
-                .andExpect(jsonPath("$[0].name").value("Firm One"))
-                .andExpect(jsonPath("$[1].id").value(firmId2.toString()))
-                .andExpect(jsonPath("$[1].name").value("Firm Two"));
+                .andExpect(jsonPath("$[1].status").value("PAUSED"))
+                .andExpect(jsonPath("$[1].statusDisplayLabel").value("În pauză"));
     }
 
     @Test
-    void createFirmWithInvalidPayloadReturnsValidationError() throws Exception {
+    void updateFirmStatusReturnsUpdatedFirm() throws Exception {
         UUID userId = UUID.randomUUID();
-        CreateFirmRequest invalid = new CreateFirmRequest("");
+        UUID firmId = UUID.randomUUID();
 
-        mockMvc.perform(post("/firms")
+        when(firmService.updateFirmStatus(eq(userId), eq(firmId), any(FirmContracts.UpdateFirmStatusSpec.class)))
+                .thenReturn(summary(firmId, "Demo", MemberRole.OWNER, FirmStatus.CRITICAL, "DB issue"));
+
+        mockMvc.perform(patch("/firms/{firmId}/status", firmId)
                         .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt -> jwt.subject(userId.toString())))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(invalid)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
-                .andExpect(jsonPath("$.message").value("Request validation failed"));
+                        .content("""
+                                {"status":"CRITICAL","message":"DB issue"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CRITICAL"))
+                .andExpect(jsonPath("$.statusMessage").value("DB issue"));
     }
 
     @Test
-    void listFirmsWithoutTokenReturnsUnauthorized() throws Exception {
-        mockMvc.perform(get("/firms"))
-                .andExpect(status().isUnauthorized());
+    void deleteFirmReturnsNoContent() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID firmId = UUID.randomUUID();
+
+        mockMvc.perform(delete("/firms/{firmId}", firmId)
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt -> jwt.subject(userId.toString()))))
+                .andExpect(status().isNoContent());
     }
 }
