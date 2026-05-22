@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+    <appender name="MAINT_RING" class="com.mirceone.inventoryapp.ops.MaintenanceRingAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
+    </appender>
+
+    <!-- Ring buffer honours app.ops.log-ring-enabled inside {@link MaintenanceLogRing}; keep appender wired always. -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="MAINT_RING"/>
+    </root>
+</configuration>
