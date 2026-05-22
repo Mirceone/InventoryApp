@@ -6,10 +6,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.io.IOException;
-import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -26,13 +22,11 @@ public final class DBCreator {
             "^jdbc:postgresql://(?<host>[^:/]+)(?::(?<port>\\d+))?/(?<db>[^?]+).*$",
             Pattern.CASE_INSENSITIVE
     );
-    private static final String DOTENV_FILE = ".env";
-
     private DBCreator() {
     }
 
     public static void createDatabaseIfMissing() {
-        Map<String, String> dotenvValues = loadDotenvFromProjectRoot();
+        Map<String, String> dotenvValues = DotenvLoader.loadDotenvFromProjectRoot();
 
         boolean enabled = getConfigAsBoolean(dotenvValues, "APP_DB_CREATE_IF_MISSING", true);
         if (!enabled) {
@@ -115,46 +109,6 @@ public final class DBCreator {
                     "Missing required config key '" + key + "'. " +
                             "Set it in .env (project root) or as environment variable."
             );
-        }
-        return value;
-    }
-
-    private static Map<String, String> loadDotenvFromProjectRoot() {
-        Map<String, String> values = new HashMap<>();
-        Path dotenvPath = Path.of(System.getProperty("user.dir"), DOTENV_FILE);
-        if (!Files.exists(dotenvPath)) {
-            return values;
-        }
-
-        try {
-            for (String line : Files.readAllLines(dotenvPath)) {
-                String trimmed = line.trim();
-                if (trimmed.isEmpty() || trimmed.startsWith("#")) {
-                    continue;
-                }
-
-                int separator = trimmed.indexOf('=');
-                if (separator <= 0) {
-                    continue;
-                }
-
-                String key = trimmed.substring(0, separator).trim();
-                String value = trimmed.substring(separator + 1).trim();
-                values.put(key, stripWrappingQuotes(value));
-            }
-        } catch (IOException e) {
-            throw new IllegalStateException("Unable to read .env file from project root: " + dotenvPath, e);
-        }
-
-        return values;
-    }
-
-    private static String stripWrappingQuotes(String value) {
-        if (value.length() >= 2) {
-            if ((value.startsWith("\"") && value.endsWith("\""))
-                    || (value.startsWith("'") && value.endsWith("'"))) {
-                return value.substring(1, value.length() - 1);
-            }
         }
         return value;
     }

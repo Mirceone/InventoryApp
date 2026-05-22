@@ -2,7 +2,9 @@ package com.mirceone.inventoryapp.api.inventory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mirceone.inventoryapp.security.AuthRateLimiter;
-import com.mirceone.inventoryapp.service.InventoryService;
+import org.springframework.beans.factory.annotation.Qualifier;
+import com.mirceone.inventoryapp.service.inventory.InventoryContracts;
+import com.mirceone.inventoryapp.service.inventory.InventoryService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -39,18 +41,24 @@ class ProductControllerWebMvcTest {
     private InventoryService inventoryService;
 
     @MockitoBean
+    @Qualifier("authRateLimiter")
     private AuthRateLimiter authRateLimiter;
+
+    @MockitoBean
+    @Qualifier("documentUploadRateLimiter")
+    private AuthRateLimiter documentUploadRateLimiter;
 
     @Test
     void createProductReturnsCreatedProduct() throws Exception {
         UUID userId = UUID.randomUUID();
         UUID firmId = UUID.randomUUID();
         UUID categoryId = UUID.randomUUID();
-        CreateProductRequest request = new CreateProductRequest("Keyboard", "KB-001", 5, null, null, null, null);
-        ProductResponse response = new ProductResponse(
-                UUID.randomUUID(), "Keyboard", "KB-001", 5, true, null, categoryId, "Misc", null);
+        CreateProductRequest request = new CreateProductRequest("Keyboard", "KB-001", 5, null, null, null, null, null);
+        InventoryContracts.ProductSummary svcResult = new InventoryContracts.ProductSummary(
+                UUID.randomUUID(), "Keyboard", "KB-001", 5, true, null, categoryId, "Misc", null, null);
 
-        when(inventoryService.createProduct(eq(userId), eq(firmId), any(CreateProductRequest.class))).thenReturn(response);
+        when(inventoryService.createProduct(eq(userId), eq(firmId), any(InventoryContracts.CreateProductSpec.class)))
+                .thenReturn(svcResult);
 
         mockMvc.perform(post("/firms/{firmId}/products", firmId)
                         .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt -> jwt.subject(userId.toString())))
@@ -69,8 +77,8 @@ class ProductControllerWebMvcTest {
         UUID c1 = UUID.randomUUID();
         UUID c2 = UUID.randomUUID();
         when(inventoryService.listProducts(eq(userId), eq(firmId))).thenReturn(List.of(
-                new ProductResponse(UUID.randomUUID(), "Mouse", "MS-1", 10, true, null, c1, "Misc", null),
-                new ProductResponse(UUID.randomUUID(), "Monitor", "MN-1", 4, true, 6, c2, "Electronics", null)
+                new InventoryContracts.ProductSummary(UUID.randomUUID(), "Mouse", "MS-1", 10, true, null, c1, "Misc", null, null),
+                new InventoryContracts.ProductSummary(UUID.randomUUID(), "Monitor", "MN-1", 4, true, 6, c2, "Electronics", null, null)
         ));
 
         mockMvc.perform(get("/firms/{firmId}/products", firmId)
@@ -86,10 +94,10 @@ class ProductControllerWebMvcTest {
         UUID firmId = UUID.randomUUID();
         UUID productId = UUID.randomUUID();
         SetStockRequest request = new SetStockRequest(25);
-        ProductResponse response = new ProductResponse(
-                productId, "Monitor", "MN-1", 25, true, null, UUID.randomUUID(), "Misc", null);
+        InventoryContracts.ProductSummary svcResult = new InventoryContracts.ProductSummary(
+                productId, "Monitor", "MN-1", 25, true, null, UUID.randomUUID(), "Misc", null, null);
 
-        when(inventoryService.setStock(eq(userId), eq(firmId), eq(productId), any(SetStockRequest.class))).thenReturn(response);
+        when(inventoryService.setStock(eq(userId), eq(firmId), eq(productId), eq(25))).thenReturn(svcResult);
 
         mockMvc.perform(put("/firms/{firmId}/products/{productId}/stock", firmId, productId)
                         .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt -> jwt.subject(userId.toString())))
@@ -105,10 +113,10 @@ class ProductControllerWebMvcTest {
         UUID firmId = UUID.randomUUID();
         UUID productId = UUID.randomUUID();
         AdjustStockRequest request = new AdjustStockRequest(-3);
-        ProductResponse response = new ProductResponse(
-                productId, "Mouse", "MS-1", 7, true, null, UUID.randomUUID(), "Misc", null);
+        InventoryContracts.ProductSummary svcResult = new InventoryContracts.ProductSummary(
+                productId, "Mouse", "MS-1", 7, true, null, UUID.randomUUID(), "Misc", null, null);
 
-        when(inventoryService.adjustStock(eq(userId), eq(firmId), eq(productId), any(AdjustStockRequest.class))).thenReturn(response);
+        when(inventoryService.adjustStock(eq(userId), eq(firmId), eq(productId), eq(-3))).thenReturn(svcResult);
 
         mockMvc.perform(post("/firms/{firmId}/products/{productId}/stock/adjust", firmId, productId)
                         .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt -> jwt.subject(userId.toString())))
@@ -122,7 +130,7 @@ class ProductControllerWebMvcTest {
     void createProductWithInvalidPayloadReturnsValidationError() throws Exception {
         UUID userId = UUID.randomUUID();
         UUID firmId = UUID.randomUUID();
-        CreateProductRequest invalid = new CreateProductRequest("", "SKU", 1, null, null, null, null);
+        CreateProductRequest invalid = new CreateProductRequest("", "SKU", 1, null, null, null, null, null);
 
         mockMvc.perform(post("/firms/{firmId}/products", firmId)
                         .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt -> jwt.subject(userId.toString())))
@@ -140,7 +148,7 @@ class ProductControllerWebMvcTest {
         UUID productId = UUID.randomUUID();
         AdjustStockRequest request = new AdjustStockRequest(-999);
 
-        when(inventoryService.adjustStock(eq(userId), eq(firmId), eq(productId), any(AdjustStockRequest.class)))
+        when(inventoryService.adjustStock(eq(userId), eq(firmId), eq(productId), eq(-999)))
                 .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "Stock cannot be negative"));
 
         mockMvc.perform(post("/firms/{firmId}/products/{productId}/stock/adjust", firmId, productId)
@@ -159,7 +167,7 @@ class ProductControllerWebMvcTest {
         UUID productId = UUID.randomUUID();
         UUID catId = UUID.randomUUID();
         when(inventoryService.listBuyList(eq(userId), eq(firmId))).thenReturn(List.of(
-                new BuyListItemResponse(productId, "Low", "L-1", 2, 4, 2, catId, "Misc")
+                new InventoryContracts.BuyListLine(productId, "Low", "L-1", 2, 4, 2, catId, "Misc", null)
         ));
 
         mockMvc.perform(get("/firms/{firmId}/products/buy-list", firmId)
@@ -175,12 +183,12 @@ class ProductControllerWebMvcTest {
         UUID userId = UUID.randomUUID();
         UUID firmId = UUID.randomUUID();
         UUID productId = UUID.randomUUID();
-        UpdateProductRequest request = new UpdateProductRequest(null, null, null, 8, null, null);
-        ProductResponse response = new ProductResponse(
-                productId, "Name", "SKU", 5, true, 8, UUID.randomUUID(), "Misc", null);
+        UpdateProductRequest request = new UpdateProductRequest(null, null, null, 8, null, null, null, null);
+        InventoryContracts.ProductSummary svcResult = new InventoryContracts.ProductSummary(
+                productId, "Name", "SKU", 5, true, 8, UUID.randomUUID(), "Misc", null, null);
 
-        when(inventoryService.updateProduct(eq(userId), eq(firmId), eq(productId), any(UpdateProductRequest.class)))
-                .thenReturn(response);
+        when(inventoryService.updateProduct(eq(userId), eq(firmId), eq(productId), any(InventoryContracts.UpdateProductSpec.class)))
+                .thenReturn(svcResult);
 
         mockMvc.perform(patch("/firms/{firmId}/products/{productId}", firmId, productId)
                         .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt -> jwt.subject(userId.toString())))

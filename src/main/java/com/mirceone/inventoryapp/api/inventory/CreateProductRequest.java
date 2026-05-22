@@ -16,6 +16,8 @@ public record CreateProductRequest(
         @Min(0) Integer reorderThreshold,
         /** When null, product is placed in the default {@code Misc} category. */
         UUID categoryId,
-        @Size(max = 2048) String imgUrl
+        @Size(max = 2048) String imgUrl,
+        /** Optional preferred shopping / route stop for buy-list routing. */
+        UUID preferredRouteStopId
 ) {
 }

@@ -1,6 +1,6 @@
 package com.mirceone.inventoryapp.api.inventory;
 
-import com.mirceone.inventoryapp.service.InventoryService;
+import com.mirceone.inventoryapp.service.inventory.InventoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -40,7 +40,9 @@ public class ProductController {
             @Valid @RequestBody CreateProductRequest request
     ) {
         UUID userId = UUID.fromString(jwt.getSubject());
-        return inventoryService.createProduct(userId, firmId, request);
+        return InventoryWebMapper.toProductResponse(
+                inventoryService.createProduct(userId, firmId, InventoryWebMapper.toCreateProductSpec(request))
+        );
     }
 
     @GetMapping
@@ -55,7 +57,7 @@ public class ProductController {
             @PathVariable UUID firmId
     ) {
         UUID userId = UUID.fromString(jwt.getSubject());
-        return inventoryService.listProducts(userId, firmId);
+        return InventoryWebMapper.toProductResponseList(inventoryService.listProducts(userId, firmId));
     }
 
     @GetMapping("/buy-list")
@@ -70,7 +72,7 @@ public class ProductController {
             @PathVariable UUID firmId
     ) {
         UUID userId = UUID.fromString(jwt.getSubject());
-        return inventoryService.listBuyList(userId, firmId);
+        return InventoryWebMapper.toBuyListResponseList(inventoryService.listBuyList(userId, firmId));
     }
 
     @PatchMapping("/{productId}")
@@ -89,7 +91,9 @@ public class ProductController {
             @Valid @RequestBody UpdateProductRequest request
     ) {
         UUID userId = UUID.fromString(jwt.getSubject());
-        return inventoryService.updateProduct(userId, firmId, productId, request);
+        return InventoryWebMapper.toProductResponse(
+                inventoryService.updateProduct(userId, firmId, productId, InventoryWebMapper.toUpdateProductSpec(request))
+        );
     }
 
     @PutMapping("/{productId}/stock")
@@ -108,7 +112,9 @@ public class ProductController {
             @Valid @RequestBody SetStockRequest request
     ) {
         UUID userId = UUID.fromString(jwt.getSubject());
-        return inventoryService.setStock(userId, firmId, productId, request);
+        return InventoryWebMapper.toProductResponse(
+                inventoryService.setStock(userId, firmId, productId, request.quantity())
+        );
     }
 
     @PostMapping("/{productId}/stock/adjust")
@@ -127,6 +133,8 @@ public class ProductController {
             @Valid @RequestBody AdjustStockRequest request
     ) {
         UUID userId = UUID.fromString(jwt.getSubject());
-        return inventoryService.adjustStock(userId, firmId, productId, request);
+        return InventoryWebMapper.toProductResponse(
+                inventoryService.adjustStock(userId, firmId, productId, request.delta())
+        );
     }
 }

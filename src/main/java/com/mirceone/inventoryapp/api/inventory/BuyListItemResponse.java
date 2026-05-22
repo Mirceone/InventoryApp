@@ -11,6 +11,7 @@ public record BuyListItemResponse(
         /** Units needed to reach the minimum (min minus current). */
         int shortfall,
         UUID categoryId,
-        String categoryName
+        String categoryName,
+        UUID preferredRouteStopId
 ) {
 }

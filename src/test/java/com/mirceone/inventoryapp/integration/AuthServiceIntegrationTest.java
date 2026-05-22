@@ -1,12 +1,9 @@
 package com.mirceone.inventoryapp.integration;
 
-import com.mirceone.inventoryapp.api.auth.AuthResponse;
-import com.mirceone.inventoryapp.api.auth.LogoutRequest;
-import com.mirceone.inventoryapp.api.auth.RefreshRequest;
-import com.mirceone.inventoryapp.api.auth.SignupRequest;
 import com.mirceone.inventoryapp.model.UserEntity;
 import com.mirceone.inventoryapp.repository.UserRepository;
-import com.mirceone.inventoryapp.service.AuthService;
+import com.mirceone.inventoryapp.service.auth.AuthContracts;
+import com.mirceone.inventoryapp.service.auth.AuthService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -28,36 +25,44 @@ class AuthServiceIntegrationTest extends IntegrationTestBase {
 
     @Test
     void signupAndRefreshFlowWorksEndToEnd() {
-        AuthResponse signup = authService.signup(new SignupRequest("integration1@example.com", "password123", "Integration User"));
+        AuthContracts.IssuedTokenPair signup =
+                authService.signup(new AuthContracts.SignupSpec("integration1@example.com", "password123", "Integration User"));
         assertTrue(signup.accessToken() != null && !signup.accessToken().isBlank());
         assertTrue(signup.refreshToken() != null && !signup.refreshToken().isBlank());
 
-        AuthResponse refreshed = authService.refresh(new RefreshRequest(signup.refreshToken()));
+        AuthContracts.IssuedTokenPair refreshed =
+                authService.refresh(new AuthContracts.RefreshSpec(signup.refreshToken()));
         assertTrue(refreshed.accessToken() != null && !refreshed.accessToken().isBlank());
         assertTrue(refreshed.refreshToken() != null && !refreshed.refreshToken().isBlank());
         assertFalse(signup.refreshToken().equals(refreshed.refreshToken()));
 
-        assertThrows(ResponseStatusException.class, () -> authService.refresh(new RefreshRequest(signup.refreshToken())));
+        assertThrows(ResponseStatusException.class,
+                () -> authService.refresh(new AuthContracts.RefreshSpec(signup.refreshToken())));
     }
 
     @Test
     void logoutRevokesRefreshToken() {
-        AuthResponse signup = authService.signup(new SignupRequest("integration2@example.com", "password123", "Integration User 2"));
-        authService.logout(new LogoutRequest(signup.refreshToken()));
+        AuthContracts.IssuedTokenPair signup =
+                authService.signup(new AuthContracts.SignupSpec("integration2@example.com", "password123", "Integration User 2"));
+        authService.logout(new AuthContracts.LogoutSpec(signup.refreshToken()));
 
-        assertThrows(ResponseStatusException.class, () -> authService.refresh(new RefreshRequest(signup.refreshToken())));
+        assertThrows(ResponseStatusException.class,
+                () -> authService.refresh(new AuthContracts.RefreshSpec(signup.refreshToken())));
     }
 
     @Test
     void logoutAllRevokesAllSessionsForUser() {
-        AuthResponse first = authService.signup(new SignupRequest("integration3@example.com", "password123", "Integration User 3"));
-        AuthResponse second = authService.refresh(new RefreshRequest(first.refreshToken()));
+        AuthContracts.IssuedTokenPair first =
+                authService.signup(new AuthContracts.SignupSpec("integration3@example.com", "password123", "Integration User 3"));
+        AuthContracts.IssuedTokenPair second = authService.refresh(new AuthContracts.RefreshSpec(first.refreshToken()));
 
-        UserEntity user = userRepository.findByEmailIgnoreCase("integration3@example.com").orElse(null);
+        UserEntity user =
+                userRepository.findByEmailIgnoreCase("integration3@example.com").orElse(null);
         assertNotNull(user);
 
         authService.logoutAll(user.getId());
 
-        assertThrows(ResponseStatusException.class, () -> authService.refresh(new RefreshRequest(second.refreshToken())));
+        assertThrows(ResponseStatusException.class,
+                () -> authService.refresh(new AuthContracts.RefreshSpec(second.refreshToken())));
     }
 }

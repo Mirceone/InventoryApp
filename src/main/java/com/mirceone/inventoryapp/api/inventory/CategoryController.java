@@ -1,6 +1,6 @@
 package com.mirceone.inventoryapp.api.inventory;
 
-import com.mirceone.inventoryapp.service.CategoryService;
+import com.mirceone.inventoryapp.service.inventory.CategoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -50,7 +50,7 @@ public class CategoryController {
             @Valid @RequestBody CreateCategoryRequest request
     ) {
         UUID userId = UUID.fromString(jwt.getSubject());
-        return categoryService.createCategory(userId, firmId, request.name());
+        return InventoryWebMapper.toCategoryResponse(categoryService.createCategory(userId, firmId, request.name()));
     }
 
     @PatchMapping("/{categoryId}")
@@ -70,7 +70,9 @@ public class CategoryController {
             @Valid @RequestBody UpdateCategoryRequest request
     ) {
         UUID userId = UUID.fromString(jwt.getSubject());
-        return categoryService.updateCategory(userId, firmId, categoryId, request.name());
+        return InventoryWebMapper.toCategoryResponse(
+                categoryService.updateCategory(userId, firmId, categoryId, request.name())
+        );
     }
 
     @DeleteMapping("/{categoryId}")
@@ -104,6 +106,6 @@ public class CategoryController {
             @PathVariable UUID firmId
     ) {
         UUID userId = UUID.fromString(jwt.getSubject());
-        return categoryService.listCategories(userId, firmId);
+        return InventoryWebMapper.toCategoryResponseList(categoryService.listCategories(userId, firmId));
     }
 }

@@ -5,6 +5,10 @@ import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * Firm membership and role. Authorization uses {@link #role} as the source of truth.
+ * {@code firms.owner_user_id} must stay in sync when ownership is transferred (see {@code FirmEntity}).
+ */
 @Entity
 @Table(
         name = "firm_members",
@@ -60,5 +64,9 @@ public class FirmMemberEntity {
 
     public MemberRole getRole() {
         return role;
+    }
+
+    public void setRole(MemberRole role) {
+        this.role = role;
     }
 }

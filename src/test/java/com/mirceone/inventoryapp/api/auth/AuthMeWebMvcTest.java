@@ -2,7 +2,10 @@ package com.mirceone.inventoryapp.api.auth;
 
 import com.mirceone.inventoryapp.model.ProviderType;
 import com.mirceone.inventoryapp.security.AuthRateLimiter;
-import com.mirceone.inventoryapp.service.AuthService;
+import org.springframework.beans.factory.annotation.Qualifier;
+import com.mirceone.inventoryapp.service.auth.AuthContracts;
+import com.mirceone.inventoryapp.service.auth.AuthService;
+import com.mirceone.inventoryapp.service.auth.PasswordResetService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -29,12 +32,21 @@ class AuthMeWebMvcTest {
     private AuthService authService;
 
     @MockitoBean
+    private PasswordResetService passwordResetService;
+
+    @MockitoBean
+    @Qualifier("authRateLimiter")
     private AuthRateLimiter authRateLimiter;
+
+    @MockitoBean
+    @Qualifier("documentUploadRateLimiter")
+    private AuthRateLimiter documentUploadRateLimiter;
 
     @Test
     void meReturnsCurrentUser() throws Exception {
         UUID userId = UUID.randomUUID();
-        MeResponse me = new MeResponse(userId, "john@example.com", "John", ProviderType.LOCAL);
+        AuthContracts.CurrentUserSnapshot me =
+                new AuthContracts.CurrentUserSnapshot(userId, "john@example.com", "John", ProviderType.LOCAL);
         when(authService.getMe(userId)).thenReturn(me);
 
         mockMvc.perform(get("/auth/me")

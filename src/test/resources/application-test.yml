@@ -22,3 +22,7 @@ spring:
 app:
   db:
     create-if-missing: false
+  features:
+    dossier-ai-enabled: false
+  documents:
+    organization-poll-interval: 365d

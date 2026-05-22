@@ -2,7 +2,9 @@ package com.mirceone.inventoryapp.api.inventory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mirceone.inventoryapp.security.AuthRateLimiter;
-import com.mirceone.inventoryapp.service.CategoryService;
+import org.springframework.beans.factory.annotation.Qualifier;
+import com.mirceone.inventoryapp.service.inventory.CategoryService;
+import com.mirceone.inventoryapp.service.inventory.InventoryContracts;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -41,7 +43,12 @@ class CategoryControllerWebMvcTest {
     private CategoryService categoryService;
 
     @MockitoBean
+    @Qualifier("authRateLimiter")
     private AuthRateLimiter authRateLimiter;
+
+    @MockitoBean
+    @Qualifier("documentUploadRateLimiter")
+    private AuthRateLimiter documentUploadRateLimiter;
 
     @Test
     void createCategoryReturnsCreatedCategory() throws Exception {
@@ -51,7 +58,7 @@ class CategoryControllerWebMvcTest {
         CreateCategoryRequest request = new CreateCategoryRequest("Tools");
 
         when(categoryService.createCategory(eq(userId), eq(firmId), eq("Tools")))
-                .thenReturn(new CategoryResponse(categoryId, "Tools"));
+                .thenReturn(new InventoryContracts.CategorySummary(categoryId, "Tools"));
 
         mockMvc.perform(post("/firms/{firmId}/categories", firmId)
                         .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt -> jwt.subject(userId.toString())))
@@ -102,7 +109,7 @@ class CategoryControllerWebMvcTest {
         UpdateCategoryRequest request = new UpdateCategoryRequest("Hardware");
 
         when(categoryService.updateCategory(eq(userId), eq(firmId), eq(categoryId), eq("Hardware")))
-                .thenReturn(new CategoryResponse(categoryId, "Hardware"));
+                .thenReturn(new InventoryContracts.CategorySummary(categoryId, "Hardware"));
 
         mockMvc.perform(patch("/firms/{firmId}/categories/{categoryId}", firmId, categoryId)
                         .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt -> jwt.subject(userId.toString())))
@@ -145,8 +152,8 @@ class CategoryControllerWebMvcTest {
         UUID firmId = UUID.randomUUID();
         UUID miscId = UUID.randomUUID();
         when(categoryService.listCategories(eq(userId), eq(firmId))).thenReturn(List.of(
-                new CategoryResponse(miscId, "Misc"),
-                new CategoryResponse(UUID.randomUUID(), "Tools")
+                new InventoryContracts.CategorySummary(miscId, "Misc"),
+                new InventoryContracts.CategorySummary(UUID.randomUUID(), "Tools")
         ));
 
         mockMvc.perform(get("/firms/{firmId}/categories", firmId)
