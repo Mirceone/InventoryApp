@@ -8,9 +8,11 @@ import com.mirceone.inventoryapp.model.MemberRole;
 import com.mirceone.inventoryapp.repository.FirmDocumentRepository;
 import com.mirceone.inventoryapp.repository.FirmMemberRepository;
 import com.mirceone.inventoryapp.repository.FirmRepository;
+import com.mirceone.inventoryapp.repository.FirmStatusHistoryRepository;
 import com.mirceone.inventoryapp.service.documents.storage.DocumentStorage;
 import com.mirceone.inventoryapp.service.firms.access.FirmAccessService;
 import com.mirceone.inventoryapp.service.inventory.CategoryService;
+import com.mirceone.inventoryapp.service.notifications.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,9 +41,13 @@ class FirmServiceTest {
     @Mock
     private FirmDocumentRepository firmDocumentRepository;
     @Mock
+    private FirmStatusHistoryRepository firmStatusHistoryRepository;
+    @Mock
     private DocumentStorage documentStorage;
     @Mock
     private CategoryService categoryService;
+    @Mock
+    private NotificationService notificationService;
 
     private FirmService firmService;
 
@@ -56,9 +62,11 @@ class FirmServiceTest {
                 firmRepository,
                 firmMemberRepository,
                 firmDocumentRepository,
+                firmStatusHistoryRepository,
                 documentStorage,
                 categoryService,
-                firmAccessService
+                firmAccessService,
+                notificationService
         );
         userId = UUID.randomUUID();
         firmId = UUID.randomUUID();
@@ -107,7 +115,10 @@ class FirmServiceTest {
         );
 
         assertEquals(FirmStatus.PAUSED, result.status());
-        assertEquals("În pauză", result.statusDisplayLabel());
+        assertEquals("Paused", result.statusDisplayLabel());
+        verify(notificationService).notifyFirmStatusChangedAfterCommit(
+                firmId, FirmStatus.ACTIVE, FirmStatus.PAUSED, null, com.mirceone.inventoryapp.model.FirmStatusChangeSource.MANUAL
+        );
     }
 
     @Test

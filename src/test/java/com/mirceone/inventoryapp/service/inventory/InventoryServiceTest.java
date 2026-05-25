@@ -8,12 +8,14 @@ import com.mirceone.inventoryapp.repository.ProductRepository;
 import com.mirceone.inventoryapp.repository.RouteStopRepository;
 import com.mirceone.inventoryapp.repository.StockChangeEventRepository;
 import com.mirceone.inventoryapp.service.firms.access.FirmAccessService;
+import com.mirceone.inventoryapp.service.notifications.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -23,6 +25,8 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -39,6 +43,8 @@ class InventoryServiceTest {
     private FirmAccessService firmAccessService;
     @Mock
     private RouteStopRepository routeStopRepository;
+    @Mock
+    private NotificationService notificationService;
 
     private InventoryService inventoryService;
 
@@ -50,6 +56,7 @@ class InventoryServiceTest {
                 categoryRepository,
                 firmAccessService,
                 routeStopRepository,
+                notificationService,
                 4
         );
     }
@@ -71,6 +78,7 @@ class InventoryServiceTest {
         assertEquals("Laptop", response.name());
         assertEquals("SKU-1", response.sku());
         assertEquals(10, response.currentQuantity());
+        verify(notificationService).notifyProductCreatedAfterCommit(firmId, saved.getId(), "Laptop", "SKU-1", 10);
     }
 
     @Test
@@ -134,6 +142,40 @@ class InventoryServiceTest {
         inventoryService.adjustStock(userId, firmId, productId, -3);
 
         verify(stockChangeEventRepository).save(any());
+    }
+
+    @Test
+    void adjustStockCrossingBelowThresholdPublishesLowStockNotification() {
+        UUID userId = UUID.randomUUID();
+        UUID firmId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+        CategoryEntity misc = new CategoryEntity(firmId, "Misc");
+        ProductEntity product = new ProductEntity(firmId, "Mouse", "MS-LOW", 5, true, 4, misc, null, null);
+        ReflectionTestUtils.setField(product, "id", productId);
+
+        when(productRepository.findByIdAndFirmId(productId, firmId)).thenReturn(Optional.of(product));
+        when(productRepository.save(any(ProductEntity.class))).thenReturn(product);
+
+        inventoryService.adjustStock(userId, firmId, productId, -2);
+
+        verify(notificationService).notifyProductLowStockAfterCommit(firmId, productId, "Mouse", "MS-LOW", 3, 4);
+    }
+
+    @Test
+    void adjustStockWhileAlreadyBelowThresholdDoesNotPublishAnotherLowStockNotification() {
+        UUID userId = UUID.randomUUID();
+        UUID firmId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+        CategoryEntity misc = new CategoryEntity(firmId, "Misc");
+        ProductEntity product = new ProductEntity(firmId, "Mouse", "MS-LOW", 3, true, 4, misc, null, null);
+        ReflectionTestUtils.setField(product, "id", productId);
+
+        when(productRepository.findByIdAndFirmId(productId, firmId)).thenReturn(Optional.of(product));
+        when(productRepository.save(any(ProductEntity.class))).thenReturn(product);
+
+        inventoryService.adjustStock(userId, firmId, productId, -1);
+
+        verify(notificationService, never()).notifyProductLowStockAfterCommit(any(), any(), any(), any(), anyInt(), anyInt());
     }
 
     @Test

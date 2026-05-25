@@ -106,6 +106,31 @@ public class AuthService {
         );
     }
 
+    @Transactional
+    public AuthContracts.IssuedTokenPair issueTokenPairForUser(UUID userId) {
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "User not found"));
+        return issueTokenPair(user);
+    }
+
+    @Transactional
+    public UserEntity createLocalUser(String email, String password, String displayName) {
+        String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+        if (userRepository.findByEmailIgnoreCase(normalizedEmail).isPresent()) {
+            throw new ResponseStatusException(CONFLICT, "Email already in use");
+        }
+        String passwordHash = passwordEncoder.encode(password);
+        String trimmedDisplayName = displayName == null ? null : displayName.trim();
+        UserEntity user = new UserEntity(
+                normalizedEmail,
+                passwordHash,
+                ProviderType.LOCAL,
+                normalizedEmail,
+                trimmedDisplayName
+        );
+        return userRepository.save(user);
+    }
+
     private AuthContracts.IssuedTokenPair issueTokenPair(UserEntity user) {
         String accessToken = jwtTokenService.createAccessToken(user.getId(), user.getEmail(), user.getProvider());
         String refreshToken = refreshTokenService.create(user.getId());

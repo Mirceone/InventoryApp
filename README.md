@@ -20,7 +20,9 @@ Variabile importante (valorile din `application.yml` au fallback-uri pentru dev)
 | `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | Conexiune PostgreSQL |
 | `APP_JWT_SECRET` | Secret semnătură JWT (**obligatoriu în producție**; dacă lipsește local, poate fi generat la startup — vezi config) |
 | `APP_SECURITY_CORS_ALLOWED_ORIGINS` | Origini frontend (JSON array sau liste Spring), ex.: `http://localhost:5173` |
-| `APP_FRONTEND_URL` | Bază pentru link-uri din email (reset parolă) |
+| `APP_FRONTEND_URL` | Bază pentru link-uri din email (reset parolă, invitații) |
+| `APP_INVITATIONS_TOKEN_TTL_SECONDS` | Expirare token invitație (implicit 604800 = 7 zile) |
+| `APP_OPS_API_KEY` | API key pentru endpointurile `/ops/*` |
 | `RESEND_API_KEY`, `RESEND_FROM` | Email tranzacțional (dacă sunt goale se folosește implementarea care doar loghează) |
 
 Aplicația citește un fișier **`.env` din directorul curent**, dacă există (înainte de pornirea Spring — vezi `DotenvLoader` și `InventoryAppApplication`).
@@ -72,9 +74,44 @@ Răspuns **413** dacă fișierul depășește limita; **409** la download dacă 
 - `GET /firms` returnează per firmă: `role` (`OWNER` | `MEMBER`), `roleDisplayLabel`, `status` (`ACTIVE` | `PAUSED` | `CRITICAL`), `statusDisplayLabel`, `statusMessage`.
 - La creare, status implicit: **ACTIVE**.
 - `PATCH /firms/{firmId}/status` — schimbare status (OWNER); `message` opțional (recomandat la `CRITICAL`).
+- `GET /firms/{firmId}/status/history` — istoric status (OWNER), cu sursă `MANUAL` / `SYSTEM`.
 - Când status ≠ `ACTIVE`: toate operațiile pe firmă (inventar, dosare, documente, rename) sunt blocate cu **403**; `GET /firms`, `PATCH .../status` și `DELETE` firmă rămân pentru OWNER.
 - Redenumire / ștergere firmă: doar `OWNER` (`PATCH` / `DELETE` pe `/firms/{firmId}`).
+- Un monitor backend verifică periodic consistența `firms.owner_user_id` vs `firm_members.role`; dacă găsește drift, setează firma `CRITICAL`.
 - **Ghid frontend (complet):** [`docs/ghid-frontend-firme.md`](docs/ghid-frontend-firme.md) — roluri, status, Settings, erori, checklist.
+
+## Invitații membri (echipă)
+
+- Doar **OWNER** poate invita (`POST /firms/{firmId}/invitations`) — rol invitat: **MEMBER** (Angajat).
+- Email cu link: `{APP_FRONTEND_URL}/accept-invitation?token=...` (TTL: `APP_INVITATIONS_TOKEN_TTL_SECONDS`, implicit 7 zile).
+- **Cont nou:** `GET /auth/invitations/{token}` (preview) → `POST /auth/accept-invitation` cu `displayName` + `password` → JWT.
+- **Cont existent:** login obligatoriu, apoi `POST /auth/accept-invitation` cu `{ "token": "..." }` + Bearer.
+- `GET /firms/{firmId}/members` — listă echipă.
+- `PATCH /firms/{firmId}/members/{memberUserId}/role` — schimbare rol membru (în prezent folosit pentru reguli explicite; `OWNER` nu se setează aici).
+- `DELETE /firms/{firmId}/members/{memberUserId}` — scoate membru din firmă.
+- `POST /firms/{firmId}/ownership/transfer` — inițiază transferul de ownership și trimite owner-ului curent un cod de confirmare din 6 cifre pe email (`202 Accepted`).
+- `POST /firms/{firmId}/ownership/transfer/confirm` — confirmă transferul cu codul primit pe email (`204 No Content`).
+- `GET/DELETE /firms/{firmId}/invitations` — pending / revoke.
+- La confirmare, backend-ul trimite emailuri finale atât fostului owner, cât și noului owner promovat.
+- **Ghid frontend:** [`docs/ghid-frontend-invitations.md`](docs/ghid-frontend-invitations.md).
+
+## Notificări
+
+- `GET /notifications` — inbox per user cu `unreadCount` + listă notificări (`?unreadOnly`, `?limit`).
+- `POST /notifications/{notificationId}/read` — marchează o notificare ca citită.
+- `POST /notifications/read-all` — marchează toate notificările userului ca citite.
+- Evenimentele v1:
+  - `PRODUCT_CREATED`
+  - `PRODUCT_LOW_STOCK` (doar la crossing sub prag; buy list-ul rămâne calculat dinamic)
+  - `FIRM_STATUS_CHANGED` (manual sau `SYSTEM`)
+- Email-ul este folosit conservator doar când o firmă intră în `CRITICAL`, către owner-ul curent.
+- **Ghid frontend:** [`docs/ghid-frontend-notifications.md`](docs/ghid-frontend-notifications.md).
+
+## Ops / diagnostic
+
+- `GET /ops/logs` și `GET /ops/events` expun loguri și evenimente operaționale recente.
+- Accesul se face cu header `X-Ops-Api-Key` și cheia din `APP_OPS_API_KEY`.
+- Suprafața este read-only și destinată debugging-ului backend.
 
 ## Structură pachete (rezumat)
 

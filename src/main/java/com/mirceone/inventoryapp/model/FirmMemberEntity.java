@@ -69,4 +69,8 @@ public class FirmMemberEntity {
     public void setRole(MemberRole role) {
         this.role = role;
     }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
 }

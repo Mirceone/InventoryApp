@@ -6,9 +6,9 @@
 
 | `status` | `statusDisplayLabel` | Operații pe firmă |
 |----------|----------------------|-------------------|
-| `ACTIVE` | Activ | Permise (după rol) |
-| `PAUSED` | În pauză | **Blocate** (citire + scriere) |
-| `CRITICAL` | Critic | **Blocate** + afișează `statusMessage` |
+| `ACTIVE` | Active | Permise (după rol) |
+| `PAUSED` | Paused | **Blocate** (citire + scriere) |
+| `CRITICAL` | Critical | **Blocate** + afișează `statusMessage` |
 
 La `POST /firms`, firma nouă are `status: "ACTIVE"`.
 
@@ -21,7 +21,7 @@ La `POST /firms`, firma nouă are `status: "ACTIVE"`.
   "role": "OWNER",
   "roleDisplayLabel": "Admin",
   "status": "PAUSED",
-  "statusDisplayLabel": "În pauză",
+  "statusDisplayLabel": "Paused",
   "statusMessage": null
 }
 ```
@@ -72,11 +72,12 @@ export function isFirmOperational(firm: Pick<Firm, "status">): boolean {
 ## UI recomandat
 
 1. Badge status lângă numele firmei în selector (`statusDisplayLabel`).
-2. Dacă `!isFirmOperational(activeFirm)`:
+2. La schimbare de status, frontend-ul poate citi și inbox-ul din [`ghid-frontend-notifications.md`](./ghid-frontend-notifications.md); backend-ul emite `FIRM_STATUS_CHANGED` pentru update-uri manuale și automate.
+3. Dacă `!isFirmOperational(activeFirm)`:
    - Banner galben (PAUSED) sau roșu (CRITICAL) cu `statusMessage` dacă există.
    - Dezactivează navigarea inventar / dosare.
    - Păstrează acces Settings: schimbare status + ștergere firmă (OWNER).
-3. Formular status în Settings: select `ACTIVE` | `PAUSED` | `CRITICAL`, câmp mesaj pentru CRITICAL.
+4. Formular status în Settings: select `ACTIVE` | `PAUSED` | `CRITICAL`, câmp mesaj pentru CRITICAL.
 
 ## Checklist
 

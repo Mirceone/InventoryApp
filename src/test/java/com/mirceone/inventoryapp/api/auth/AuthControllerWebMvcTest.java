@@ -5,6 +5,7 @@ import com.mirceone.inventoryapp.security.AuthRateLimiter;
 import com.mirceone.inventoryapp.service.auth.AuthContracts;
 import com.mirceone.inventoryapp.service.auth.AuthService;
 import com.mirceone.inventoryapp.service.auth.PasswordResetService;
+import com.mirceone.inventoryapp.service.firms.members.FirmInvitationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -40,6 +41,9 @@ class AuthControllerWebMvcTest {
 
     @MockitoBean
     private PasswordResetService passwordResetService;
+
+    @MockitoBean
+    private FirmInvitationService firmInvitationService;
 
     @MockitoBean
     @Qualifier("authRateLimiter")

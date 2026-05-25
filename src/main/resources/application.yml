@@ -63,6 +63,12 @@ app:
   password-reset:
     token-ttl-seconds: ${APP_PASSWORD_RESET_TOKEN_TTL_SECONDS:1800}
 
+  invitations:
+    token-ttl-seconds: ${APP_INVITATIONS_TOKEN_TTL_SECONDS:604800}
+
+  firms:
+    ownership-transfer-confirmation-ttl-seconds: ${APP_FIRMS_OWNERSHIP_TRANSFER_CONFIRMATION_TTL_SECONDS:900}
+
   email:
     resend:
       api-key: ${RESEND_API_KEY:}

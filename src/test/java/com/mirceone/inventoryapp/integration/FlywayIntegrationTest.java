@@ -29,6 +29,10 @@ class FlywayIntegrationTest extends IntegrationTestBase {
         Integer passwordResetTokensTable = jdbcTemplate.queryForObject(base, Integer.class, "password_reset_tokens");
         Integer firmDocumentsTable = jdbcTemplate.queryForObject(base, Integer.class, "firm_documents");
         Integer firmDossiersTable = jdbcTemplate.queryForObject(base, Integer.class, "firm_dossiers");
+        Integer firmInvitationsTable = jdbcTemplate.queryForObject(base, Integer.class, "firm_invitations");
+        Integer firmStatusHistoryTable = jdbcTemplate.queryForObject(base, Integer.class, "firm_status_history");
+        Integer notificationsTable = jdbcTemplate.queryForObject(base, Integer.class, "notifications");
+        Integer ownershipTransferConfirmationsTable = jdbcTemplate.queryForObject(base, Integer.class, "firm_ownership_transfer_confirmations");
 
         assertEquals(1, usersTable);
         assertEquals(1, refreshTokensTable);
@@ -36,15 +40,19 @@ class FlywayIntegrationTest extends IntegrationTestBase {
         assertEquals(1, passwordResetTokensTable);
         assertEquals(1, firmDocumentsTable);
         assertEquals(1, firmDossiersTable);
+        assertEquals(1, firmInvitationsTable);
+        assertEquals(1, firmStatusHistoryTable);
+        assertEquals(1, notificationsTable);
+        assertEquals(1, ownershipTransferConfirmationsTable);
     }
 
     @Test
-    void flywaySchemaHistoryIsAppliedUpToV16() {
+    void flywaySchemaHistoryIsAppliedUpToV21() {
         Integer maxVersion = jdbcTemplate.queryForObject(
                 "select max(cast(version as integer)) from flyway_schema_history where success = true",
                 Integer.class
         );
-        assertTrue(maxVersion != null && maxVersion >= 16);
+        assertTrue(maxVersion != null && maxVersion >= 21);
     }
 
     @Test

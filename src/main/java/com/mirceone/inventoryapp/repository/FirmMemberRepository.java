@@ -14,4 +14,6 @@ public interface FirmMemberRepository extends JpaRepository<FirmMemberEntity, UU
     Optional<FirmMemberEntity> findByFirmIdAndUserId(UUID firmId, UUID userId);
 
     List<FirmMemberEntity> findAllByUserId(UUID userId);
+
+    List<FirmMemberEntity> findAllByFirmIdOrderByCreatedAtAsc(UUID firmId);
 }

@@ -11,6 +11,7 @@ import com.mirceone.inventoryapp.repository.RouteStopRepository;
 import com.mirceone.inventoryapp.repository.StockChangeEventRepository;
 import com.mirceone.inventoryapp.service.firms.access.FirmAccessService;
 import com.mirceone.inventoryapp.service.firms.access.FirmPermission;
+import com.mirceone.inventoryapp.service.notifications.NotificationService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -29,6 +30,7 @@ public class InventoryService {
     private final CategoryRepository categoryRepository;
     private final FirmAccessService firmAccessService;
     private final RouteStopRepository routeStopRepository;
+    private final NotificationService notificationService;
     private final int defaultReorderThreshold;
 
     public InventoryService(
@@ -37,6 +39,7 @@ public class InventoryService {
             CategoryRepository categoryRepository,
             FirmAccessService firmAccessService,
             RouteStopRepository routeStopRepository,
+            NotificationService notificationService,
             @Value("${app.inventory.default-reorder-threshold:4}") int defaultReorderThreshold
     ) {
         this.productRepository = productRepository;
@@ -44,6 +47,7 @@ public class InventoryService {
         this.categoryRepository = categoryRepository;
         this.firmAccessService = firmAccessService;
         this.routeStopRepository = routeStopRepository;
+        this.notificationService = notificationService;
         this.defaultReorderThreshold = defaultReorderThreshold;
     }
 
@@ -66,6 +70,13 @@ public class InventoryService {
                 preferredStop
         );
         product = productRepository.save(product);
+        notificationService.notifyProductCreatedAfterCommit(
+                firmId,
+                product.getId(),
+                product.getName(),
+                product.getSku(),
+                product.getCurrentQuantity()
+        );
 
         return toResponse(product);
     }
@@ -141,6 +152,7 @@ public class InventoryService {
         product.setCurrentQuantity(quantity);
         product = productRepository.save(product);
         saveStockEvent(userId, firmId, product.getId(), StockChangeType.SET, previousQuantity, newQuantity);
+        notifyIfLowStockCrossed(firmId, product, previousQuantity, newQuantity);
 
         return toResponse(product);
     }
@@ -161,6 +173,7 @@ public class InventoryService {
         product.setCurrentQuantity(newQuantity);
         product = productRepository.save(product);
         saveStockEvent(userId, firmId, product.getId(), StockChangeType.ADJUST, previousQuantity, newQuantity);
+        notifyIfLowStockCrossed(firmId, product, previousQuantity, newQuantity);
 
         return toResponse(product);
     }
@@ -183,6 +196,25 @@ public class InventoryService {
                 newQuantity - previousQuantity
         );
         stockChangeEventRepository.save(event);
+    }
+
+    private void notifyIfLowStockCrossed(UUID firmId, ProductEntity product, int previousQuantity, int newQuantity) {
+        if (!product.isReorderEnabled()) {
+            return;
+        }
+        int threshold = effectiveMinThreshold(product);
+        boolean wasLow = previousQuantity < threshold;
+        boolean isLow = newQuantity < threshold;
+        if (!wasLow && isLow) {
+            notificationService.notifyProductLowStockAfterCommit(
+                    firmId,
+                    product.getId(),
+                    product.getName(),
+                    product.getSku(),
+                    newQuantity,
+                    threshold
+            );
+        }
     }
 
     private InventoryContracts.ProductSummary toResponse(ProductEntity product) {

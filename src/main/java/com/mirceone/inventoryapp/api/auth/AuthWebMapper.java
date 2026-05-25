@@ -1,6 +1,7 @@
 package com.mirceone.inventoryapp.api.auth;
 
 import com.mirceone.inventoryapp.service.auth.AuthContracts;
+import com.mirceone.inventoryapp.service.firms.members.FirmInvitationContracts;
 
 public final class AuthWebMapper {
 
@@ -43,5 +44,25 @@ public final class AuthWebMapper {
 
     public static MeResponse toMeResponse(AuthContracts.CurrentUserSnapshot user) {
         return new MeResponse(user.id(), user.email(), user.displayName(), user.provider());
+    }
+
+    public static FirmInvitationContracts.AcceptInvitationSpec toAcceptInvitationSpec(AcceptInvitationRequest request) {
+        return new FirmInvitationContracts.AcceptInvitationSpec(
+                request.token(),
+                request.displayName(),
+                request.password()
+        );
+    }
+
+    public static InvitationPreviewResponse toInvitationPreviewResponse(FirmInvitationContracts.InvitationPreview preview) {
+        return new InvitationPreviewResponse(
+                preview.firmName(),
+                preview.email(),
+                preview.maskedEmail(),
+                preview.role().name(),
+                preview.roleDisplayLabel(),
+                preview.expiresAt(),
+                preview.accountExists()
+        );
     }
 }

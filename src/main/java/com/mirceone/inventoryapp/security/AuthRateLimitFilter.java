@@ -22,6 +22,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     private static final String REFRESH_PATH = "/auth/refresh";
     private static final String FORGOT_PASSWORD_PATH = "/auth/forgot-password";
     private static final String RESET_PASSWORD_PATH = "/auth/reset-password";
+    private static final String ACCEPT_INVITATION_PATH = "/auth/accept-invitation";
 
     private final AuthRateLimiter authRateLimiter;
     private final ObjectMapper objectMapper;
@@ -55,7 +56,8 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         return LOGIN_PATH.equals(uri)
                 || REFRESH_PATH.equals(uri)
                 || FORGOT_PASSWORD_PATH.equals(uri)
-                || RESET_PASSWORD_PATH.equals(uri);
+                || RESET_PASSWORD_PATH.equals(uri)
+                || ACCEPT_INVITATION_PATH.equals(uri);
     }
 
     private void writeTooManyRequestsResponse(HttpServletRequest request, HttpServletResponse response) throws IOException {

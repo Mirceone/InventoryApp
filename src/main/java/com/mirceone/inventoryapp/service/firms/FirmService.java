@@ -3,17 +3,21 @@ package com.mirceone.inventoryapp.service.firms;
 import com.mirceone.inventoryapp.model.FirmDocumentEntity;
 import com.mirceone.inventoryapp.model.FirmEntity;
 import com.mirceone.inventoryapp.model.FirmMemberEntity;
+import com.mirceone.inventoryapp.model.FirmStatusChangeSource;
+import com.mirceone.inventoryapp.model.FirmStatusHistoryEntity;
 import com.mirceone.inventoryapp.model.FirmStatus;
 import com.mirceone.inventoryapp.model.MemberRole;
 import com.mirceone.inventoryapp.repository.FirmDocumentRepository;
 import com.mirceone.inventoryapp.repository.FirmMemberRepository;
 import com.mirceone.inventoryapp.repository.FirmRepository;
+import com.mirceone.inventoryapp.repository.FirmStatusHistoryRepository;
 import com.mirceone.inventoryapp.service.documents.storage.DocumentStorage;
 import com.mirceone.inventoryapp.service.firms.access.FirmAccessService;
 import com.mirceone.inventoryapp.service.firms.access.FirmPermission;
 import com.mirceone.inventoryapp.service.firms.access.FirmStatusCatalog;
 import com.mirceone.inventoryapp.service.firms.access.MemberRoleCatalog;
 import com.mirceone.inventoryapp.service.inventory.CategoryService;
+import com.mirceone.inventoryapp.service.notifications.NotificationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -41,24 +45,30 @@ public class FirmService {
     private final FirmRepository firmRepository;
     private final FirmMemberRepository firmMemberRepository;
     private final FirmDocumentRepository firmDocumentRepository;
+    private final FirmStatusHistoryRepository firmStatusHistoryRepository;
     private final DocumentStorage documentStorage;
     private final CategoryService categoryService;
     private final FirmAccessService firmAccessService;
+    private final NotificationService notificationService;
 
     public FirmService(
             FirmRepository firmRepository,
             FirmMemberRepository firmMemberRepository,
             FirmDocumentRepository firmDocumentRepository,
+            FirmStatusHistoryRepository firmStatusHistoryRepository,
             DocumentStorage documentStorage,
             CategoryService categoryService,
-            FirmAccessService firmAccessService
+            FirmAccessService firmAccessService,
+            NotificationService notificationService
     ) {
         this.firmRepository = firmRepository;
         this.firmMemberRepository = firmMemberRepository;
         this.firmDocumentRepository = firmDocumentRepository;
+        this.firmStatusHistoryRepository = firmStatusHistoryRepository;
         this.documentStorage = documentStorage;
         this.categoryService = categoryService;
         this.firmAccessService = firmAccessService;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -106,10 +116,18 @@ public class FirmService {
     public FirmContracts.FirmSummary updateFirmStatus(UUID userId, UUID firmId, FirmContracts.UpdateFirmStatusSpec spec) {
         firmAccessService.requirePermission(firmId, userId, FirmPermission.FIRM_UPDATE);
         FirmEntity firm = requireFirm(firmId);
-        applyStatus(firm, spec.status(), spec.message());
+        applyStatus(firm, spec.status(), spec.message(), userId, FirmStatusChangeSource.MANUAL);
         FirmEntity saved = firmRepository.save(firm);
         MemberRole role = firmAccessService.resolveMembership(firmId, userId).role();
         return toSummary(saved, role);
+    }
+
+    @Transactional(readOnly = true)
+    public List<FirmContracts.FirmStatusHistoryEntry> getFirmStatusHistory(UUID userId, UUID firmId) {
+        firmAccessService.requirePermission(firmId, userId, FirmPermission.FIRM_UPDATE);
+        return firmStatusHistoryRepository.findAllByFirmIdOrderByCreatedAtDesc(firmId).stream()
+                .map(this::toHistoryEntry)
+                .toList();
     }
 
     /**
@@ -118,7 +136,7 @@ public class FirmService {
     @Transactional
     public void setFirmStatusSystem(UUID firmId, FirmStatus status, String message) {
         FirmEntity firm = requireFirm(firmId);
-        applyStatus(firm, status, message);
+        applyStatus(firm, status, message, null, FirmStatusChangeSource.SYSTEM);
         firmRepository.save(firm);
     }
 
@@ -146,10 +164,38 @@ public class FirmService {
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Firm not found"));
     }
 
-    private void applyStatus(FirmEntity firm, FirmStatus status, String message) {
+    private void applyStatus(
+            FirmEntity firm,
+            FirmStatus status,
+            String message,
+            UUID actorUserId,
+            FirmStatusChangeSource source
+    ) {
+        FirmStatus previousStatus = firm.getStatus();
+        String normalizedMessage = normalizeStatusMessage(message);
+
+        if (previousStatus == status && java.util.Objects.equals(firm.getStatusMessage(), normalizedMessage)) {
+            return;
+        }
+
         firm.setStatus(status);
-        firm.setStatusMessage(normalizeStatusMessage(message));
+        firm.setStatusMessage(normalizedMessage);
         firm.setStatusUpdatedAt(Instant.now());
+        firmStatusHistoryRepository.save(new FirmStatusHistoryEntity(
+                firm.getId(),
+                previousStatus,
+                status,
+                normalizedMessage,
+                actorUserId,
+                source
+        ));
+        notificationService.notifyFirmStatusChangedAfterCommit(
+                firm.getId(),
+                previousStatus,
+                status,
+                normalizedMessage,
+                source
+        );
     }
 
     private String normalizeStatusMessage(String message) {
@@ -204,6 +250,20 @@ public class FirmService {
                 firm.getStatus(),
                 FirmStatusCatalog.displayLabel(firm.getStatus()),
                 firm.getStatusMessage()
+        );
+    }
+
+    private FirmContracts.FirmStatusHistoryEntry toHistoryEntry(FirmStatusHistoryEntity entry) {
+        return new FirmContracts.FirmStatusHistoryEntry(
+                entry.getId(),
+                entry.getPreviousStatus(),
+                FirmStatusCatalog.displayLabel(entry.getPreviousStatus()),
+                entry.getNewStatus(),
+                FirmStatusCatalog.displayLabel(entry.getNewStatus()),
+                entry.getMessage(),
+                entry.getActorUserId(),
+                entry.getSource(),
+                entry.getCreatedAt()
         );
     }
 }

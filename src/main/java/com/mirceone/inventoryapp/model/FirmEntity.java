@@ -66,6 +66,10 @@ public class FirmEntity {
         return ownerUserId;
     }
 
+    public void setOwnerUserId(UUID ownerUserId) {
+        this.ownerUserId = ownerUserId;
+    }
+
     public String getName() {
         return name;
     }

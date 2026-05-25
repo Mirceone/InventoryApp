@@ -70,6 +70,22 @@ public class FirmController {
         );
     }
 
+    @GetMapping("/{firmId}/status/history")
+    @Operation(summary = "List firm status history (owner only)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Status history returned"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized"),
+            @ApiResponse(responseCode = "403", description = "Not firm owner"),
+            @ApiResponse(responseCode = "404", description = "Firm not found")
+    })
+    public List<FirmStatusHistoryResponse> getFirmStatusHistory(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID firmId
+    ) {
+        UUID userId = UUID.fromString(jwt.getSubject());
+        return FirmWebMapper.toHistoryResponseList(firmService.getFirmStatusHistory(userId, firmId));
+    }
+
     @PatchMapping("/{firmId}")
     @Operation(summary = "Rename firm (owner only)")
     @ApiResponses({

@@ -2,7 +2,7 @@
 
 Document unic pentru colegul de la frontend — aliniat la API-ul actual din `InventoryApp` (Spring Boot). Acoperă **roluri** (`OWNER` / `MEMBER`), **status firmă** (`ACTIVE` / `PAUSED` / `CRITICAL`), rename, delete și blocarea operațiilor.
 
-Ghiduri vechi (parțiale): [`ghid-frontend-firm-roles.md`](ghid-frontend-firm-roles.md), [`ghid-frontend-firm-status.md`](ghid-frontend-firm-status.md).
+Ghiduri vechi (parțiale): [`ghid-frontend-firm-roles.md`](ghid-frontend-firm-roles.md), [`ghid-frontend-firm-status.md`](ghid-frontend-firm-status.md). Pentru notification center vezi [`ghid-frontend-notifications.md`](./ghid-frontend-notifications.md).
 
 ---
 
@@ -32,7 +32,7 @@ Toate răspunsurile firmă (create, list, rename, update status) au **aceeași f
   "role": "OWNER",
   "roleDisplayLabel": "Admin",
   "status": "ACTIVE",
-  "statusDisplayLabel": "Activ",
+  "statusDisplayLabel": "Active",
   "statusMessage": null
 }
 ```
@@ -42,7 +42,7 @@ Toate răspunsurile firmă (create, list, rename, update status) au **aceeași f
 | `role` | `roleDisplayLabel` | Logică UI |
 |--------|-------------------|-----------|
 | `OWNER` | Admin | Poate rename, delete, schimbare status |
-| `MEMBER` | Angajat | Nu poate gestiona firma (vine după invite, faza 2) |
+| `MEMBER` | Angajat | Nu poate gestiona firma; se adaugă prin invitație — vezi [ghid-frontend-invitations.md](./ghid-frontend-invitations.md) |
 
 Folosiți **`role`** pentru `if`, nu `roleDisplayLabel`. Nu trimiteți `ADMIN` la API — e doar label UI.
 
@@ -50,9 +50,9 @@ Folosiți **`role`** pentru `if`, nu `roleDisplayLabel`. Nu trimiteți `ADMIN` l
 
 | `status` | `statusDisplayLabel` | Operații pe firmă |
 |----------|----------------------|-------------------|
-| `ACTIVE` | Activ | Permise (după rol) |
-| `PAUSED` | În pauză | **Toate blocate** (citire + scriere inventar/dosare) |
-| `CRITICAL` | Critic | **Toate blocate** + afișați `statusMessage` |
+| `ACTIVE` | Active | Permise (după rol) |
+| `PAUSED` | Paused | **Toate blocate** (citire + scriere inventar/dosare) |
+| `CRITICAL` | Critical | **Toate blocate** + afișați `statusMessage` |
 
 La `POST /firms`, status implicit: **`ACTIVE`**.
 
@@ -284,7 +284,7 @@ Când `activeFirm && !isFirmOperational(activeFirm)`:
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ ⚠ În pauză — operațiunile sunt oprite.  [Mergi la Setări] │
+│ ⚠ Paused — operațiunile sunt oprite.  [Mergi la Setări] │
 └────────────────────────────────────────────────────────────┘
 ```
 
@@ -305,11 +305,11 @@ Nu apelați produse/dosare — veți primi oricum 403.
 
 ```
 ┌──────────────────────────────────────────────────┐
-│ Demo SRL    [Admin]  [Activ ▼]                   │
+│ Demo SRL    [Admin]  [Active ▼]                  │
 ├──────────────────────────────────────────────────┤
 │ Status firmă (OWNER)                             │
-│   [ Activ | În pauză | Critic ]                  │
-│   Mesaj (dacă Critic): [________________]        │
+│   [ Active | Paused | Critical ]                 │
+│   Mesaj (dacă Critical): [________________]      │
 │   [Salvează status]                              │
 ├──────────────────────────────────────────────────┤
 │ Nume firmă (OWNER, doar ACTIVE)                  │
@@ -419,9 +419,10 @@ Taxonomie dosare (5 foldere): [`ghid-backend-five-folders.md`](ghid-backend-five
 
 ## 12. Ce nu e încă în API
 
-- Invite membri, listă echipă, schimbare rol angajat
-- Job automat care setează CRITICAL (există `setFirmStatusSystem` doar server-side)
-- Istoric schimbări status, notificări email
+- Invitații membri, listă echipă, schimbare rol, remove member și transfer ownership — **disponibile:** [ghid-frontend-invitations.md](./ghid-frontend-invitations.md)
+- Istoric schimbări status — disponibil prin `GET /firms/{firmId}/status/history`
+- Job automat conservator care setează `CRITICAL` la inconsistențe de ownership — disponibil server-side
+- Notificări inbox per user — **disponibile:** [ghid-frontend-notifications.md](./ghid-frontend-notifications.md)
 
 ---
 
