@@ -78,12 +78,6 @@
         </dependency>
 
         <dependency>
-            <groupId>com.google.ortools</groupId>
-            <artifactId>ortools-java</artifactId>
-            <version>9.14.6206</version>
-        </dependency>
-
-        <dependency>
             <groupId>com.openai</groupId>
             <artifactId>openai-java</artifactId>
             <version>4.37.0</version>
