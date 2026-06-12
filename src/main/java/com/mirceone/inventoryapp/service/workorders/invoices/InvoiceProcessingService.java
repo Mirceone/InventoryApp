@@ -1,9 +1,14 @@
 package com.mirceone.inventoryapp.service.workorders.invoices;
 
+import com.mirceone.inventoryapp.config.AppIntegrationProperties;
+import com.mirceone.inventoryapp.model.InvoiceExtractionEntity;
 import com.mirceone.inventoryapp.model.InvoiceProcessingStatus;
 import com.mirceone.inventoryapp.model.WorkOrderInvoiceEntity;
+import com.mirceone.inventoryapp.repository.InvoiceExtractionRepository;
 import com.mirceone.inventoryapp.repository.WorkOrderInvoiceRepository;
 import com.mirceone.inventoryapp.service.storage.BlobStorage;
+import com.mirceone.inventoryapp.service.support.AfterCommitExecutor;
+import com.mirceone.inventoryapp.service.workorders.invoices.extraction.InvoiceStructuringService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.Resource;
@@ -27,15 +32,27 @@ public class InvoiceProcessingService {
     private final WorkOrderInvoiceRepository invoiceRepository;
     private final BlobStorage blobStorage;
     private final InvoiceMarkdownExtractor markdownExtractor;
+    private final InvoiceExtractionRepository extractionRepository;
+    private final InvoiceStructuringService structuringService;
+    private final AfterCommitExecutor afterCommitExecutor;
+    private final AppIntegrationProperties props;
 
     public InvoiceProcessingService(
             WorkOrderInvoiceRepository invoiceRepository,
             BlobStorage blobStorage,
-            InvoiceMarkdownExtractor markdownExtractor
+            InvoiceMarkdownExtractor markdownExtractor,
+            InvoiceExtractionRepository extractionRepository,
+            InvoiceStructuringService structuringService,
+            AfterCommitExecutor afterCommitExecutor,
+            AppIntegrationProperties props
     ) {
         this.invoiceRepository = invoiceRepository;
         this.blobStorage = blobStorage;
         this.markdownExtractor = markdownExtractor;
+        this.extractionRepository = extractionRepository;
+        this.structuringService = structuringService;
+        this.afterCommitExecutor = afterCommitExecutor;
+        this.props = props;
     }
 
     @Async
@@ -104,6 +121,30 @@ public class InvoiceProcessingService {
         invoice.setProcessingError(null);
         invoice.setProcessedAt(Instant.now());
         invoiceRepository.saveAndFlush(invoice);
+        enqueueStructuring(invoice);
+    }
+
+    /**
+     * Once an invoice has readable text, queue it for structured extraction (PENDING row picked up
+     * by the structuring worker / async trigger). Best-effort: a failure here must not fail the
+     * markdown extraction that already succeeded.
+     */
+    private void enqueueStructuring(WorkOrderInvoiceEntity invoice) {
+        if (!props.getFeatures().isInvoiceExtractionEnabled()) {
+            return;
+        }
+        if (extractionRepository.existsByInvoiceId(invoice.getId())) {
+            return;
+        }
+        try {
+            InvoiceExtractionEntity extraction = new InvoiceExtractionEntity(
+                    UUID.randomUUID(), invoice.getId(), invoice.getFirmId(), invoice.getWorkOrderId());
+            extractionRepository.save(extraction);
+            UUID extractionId = extraction.getId();
+            afterCommitExecutor.execute(() -> structuringService.processAsync(extractionId));
+        } catch (Exception e) {
+            log.warn("Failed to enqueue invoice structuring for invoice={}: {}", invoice.getId(), e.getMessage());
+        }
     }
 
     private void markFailed(WorkOrderInvoiceEntity invoice, Exception error) {

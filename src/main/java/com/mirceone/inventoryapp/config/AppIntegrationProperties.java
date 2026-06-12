@@ -49,6 +49,7 @@ public class AppIntegrationProperties {
         private boolean routesEnabled = true;
         private boolean workOrderEnabled = true;
         private boolean workOrderAiEnabled = true;
+        private boolean invoiceExtractionEnabled = true;
         private boolean opsEnabled = true;
 
         public boolean isRoutesEnabled() {
@@ -73,6 +74,14 @@ public class AppIntegrationProperties {
 
         public void setWorkOrderAiEnabled(boolean workOrderAiEnabled) {
             this.workOrderAiEnabled = workOrderAiEnabled;
+        }
+
+        public boolean isInvoiceExtractionEnabled() {
+            return invoiceExtractionEnabled;
+        }
+
+        public void setInvoiceExtractionEnabled(boolean invoiceExtractionEnabled) {
+            this.invoiceExtractionEnabled = invoiceExtractionEnabled;
         }
 
         public boolean isOpsEnabled() {
@@ -180,6 +189,8 @@ public class AppIntegrationProperties {
         ));
         private Duration processingPollInterval = Duration.ofSeconds(2);
         private int processingBatchSize = 5;
+        private Duration structuringPollInterval = Duration.ofSeconds(3);
+        private int structuringBatchSize = 5;
         private String markitdownCommand = "markitdown";
         private Duration markitdownTimeout = Duration.ofSeconds(120);
         private String extractor = "markitdown";
@@ -219,6 +230,22 @@ public class AppIntegrationProperties {
 
         public void setAllowedMimePrefixes(List<String> allowedMimePrefixes) {
             this.allowedMimePrefixes = allowedMimePrefixes;
+        }
+
+        public Duration getStructuringPollInterval() {
+            return structuringPollInterval;
+        }
+
+        public void setStructuringPollInterval(Duration structuringPollInterval) {
+            this.structuringPollInterval = structuringPollInterval;
+        }
+
+        public int getStructuringBatchSize() {
+            return structuringBatchSize;
+        }
+
+        public void setStructuringBatchSize(int structuringBatchSize) {
+            this.structuringBatchSize = structuringBatchSize;
         }
 
         public Duration getProcessingPollInterval() {

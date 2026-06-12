@@ -1,9 +1,13 @@
 package com.mirceone.inventoryapp.service.workorders.invoices;
 
+import com.mirceone.inventoryapp.config.AppIntegrationProperties;
 import com.mirceone.inventoryapp.model.InvoiceProcessingStatus;
 import com.mirceone.inventoryapp.model.WorkOrderInvoiceEntity;
+import com.mirceone.inventoryapp.repository.InvoiceExtractionRepository;
 import com.mirceone.inventoryapp.repository.WorkOrderInvoiceRepository;
 import com.mirceone.inventoryapp.service.storage.BlobStorage;
+import com.mirceone.inventoryapp.service.support.AfterCommitExecutor;
+import com.mirceone.inventoryapp.service.workorders.invoices.extraction.InvoiceStructuringService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,12 +36,23 @@ class InvoiceProcessingServiceTest {
     private BlobStorage blobStorage;
     @Mock
     private InvoiceMarkdownExtractor markdownExtractor;
+    @Mock
+    private InvoiceExtractionRepository extractionRepository;
+    @Mock
+    private InvoiceStructuringService structuringService;
+    @Mock
+    private AfterCommitExecutor afterCommitExecutor;
 
     private InvoiceProcessingService processingService;
 
     @BeforeEach
     void setUp() {
-        processingService = new InvoiceProcessingService(invoiceRepository, blobStorage, markdownExtractor);
+        // These tests cover markdown extraction only; disable the structuring hand-off.
+        AppIntegrationProperties props = new AppIntegrationProperties();
+        props.getFeatures().setInvoiceExtractionEnabled(false);
+        processingService = new InvoiceProcessingService(
+                invoiceRepository, blobStorage, markdownExtractor,
+                extractionRepository, structuringService, afterCommitExecutor, props);
     }
 
     @Test

@@ -99,6 +99,18 @@ public class InvoiceController {
         return InvoiceWebMapper.toResponse(invoiceService.getInvoice(userId, firmId, workOrderId, invoiceId));
     }
 
+    @GetMapping("/{invoiceId}/extraction")
+    @Operation(summary = "Get the structured line items extracted from an invoice")
+    public InvoiceExtractionResponse getExtraction(
+            @CurrentUserId UUID userId,
+            @PathVariable UUID firmId,
+            @PathVariable UUID workOrderId,
+            @PathVariable UUID invoiceId
+    ) {
+        return InvoiceWebMapper.toExtractionResponse(
+                invoiceService.getExtraction(userId, firmId, workOrderId, invoiceId));
+    }
+
     @GetMapping("/{invoiceId}/content")
     @Operation(summary = "Download original invoice file")
     public ResponseEntity<Resource> downloadContent(

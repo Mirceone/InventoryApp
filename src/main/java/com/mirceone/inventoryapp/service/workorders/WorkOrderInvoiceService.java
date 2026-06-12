@@ -1,9 +1,13 @@
 package com.mirceone.inventoryapp.service.workorders;
 
 import com.mirceone.inventoryapp.config.AppIntegrationProperties;
+import com.mirceone.inventoryapp.model.InvoiceExtractionEntity;
+import com.mirceone.inventoryapp.model.InvoiceLineItemEntity;
 import com.mirceone.inventoryapp.model.InvoiceProcessingStatus;
 import com.mirceone.inventoryapp.model.UserEntity;
 import com.mirceone.inventoryapp.model.WorkOrderInvoiceEntity;
+import com.mirceone.inventoryapp.repository.InvoiceExtractionRepository;
+import com.mirceone.inventoryapp.repository.InvoiceLineItemRepository;
 import com.mirceone.inventoryapp.repository.UserRepository;
 import com.mirceone.inventoryapp.repository.WorkOrderInvoiceRepository;
 import com.mirceone.inventoryapp.service.firms.access.FirmAccessService;
@@ -50,6 +54,8 @@ public class WorkOrderInvoiceService {
     private final BlobStorage blobStorage;
     private final AfterCommitExecutor afterCommitExecutor;
     private final InvoiceProcessingService processingService;
+    private final InvoiceExtractionRepository extractionRepository;
+    private final InvoiceLineItemRepository lineItemRepository;
 
     public WorkOrderInvoiceService(
             AppIntegrationProperties props,
@@ -59,7 +65,9 @@ public class WorkOrderInvoiceService {
             UserRepository userRepository,
             BlobStorage blobStorage,
             AfterCommitExecutor afterCommitExecutor,
-            InvoiceProcessingService processingService
+            InvoiceProcessingService processingService,
+            InvoiceExtractionRepository extractionRepository,
+            InvoiceLineItemRepository lineItemRepository
     ) {
         this.props = props;
         this.firmAccessService = firmAccessService;
@@ -69,6 +77,8 @@ public class WorkOrderInvoiceService {
         this.blobStorage = blobStorage;
         this.afterCommitExecutor = afterCommitExecutor;
         this.processingService = processingService;
+        this.extractionRepository = extractionRepository;
+        this.lineItemRepository = lineItemRepository;
     }
 
     public InvoiceSummary upload(UUID userId, UUID firmId, UUID workOrderId, MultipartFile file) {
@@ -148,6 +158,45 @@ public class WorkOrderInvoiceService {
         requireAccess(userId, firmId, workOrderId);
         WorkOrderInvoiceEntity invoice = requireInvoice(firmId, workOrderId, invoiceId);
         return toDetailSummary(invoice);
+    }
+
+    @Transactional(readOnly = true)
+    public ExtractionDetail getExtraction(UUID userId, UUID firmId, UUID workOrderId, UUID invoiceId) {
+        requireAccess(userId, firmId, workOrderId);
+        WorkOrderInvoiceEntity invoice = requireInvoice(firmId, workOrderId, invoiceId);
+        InvoiceExtractionEntity extraction = extractionRepository.findByInvoiceId(invoice.getId())
+                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "No structured extraction for this invoice"));
+        List<ExtractionDetail.Line> lines = lineItemRepository
+                .findByExtractionIdOrderByLineNoAsc(extraction.getId())
+                .stream()
+                .map(WorkOrderInvoiceService::toLine)
+                .toList();
+        return new ExtractionDetail(
+                extraction.getId(),
+                extraction.getInvoiceId(),
+                extraction.getStatus(),
+                extraction.getSupplierName(),
+                extraction.getInvoiceNumber(),
+                extraction.getInvoiceDate(),
+                extraction.getCurrency(),
+                extraction.getTotalAmount(),
+                extraction.getError(),
+                extraction.getExtractedAt(),
+                lines
+        );
+    }
+
+    private static ExtractionDetail.Line toLine(InvoiceLineItemEntity entity) {
+        return new ExtractionDetail.Line(
+                entity.getId(),
+                entity.getLineNo(),
+                entity.getRawDescription(),
+                entity.getSku(),
+                entity.getQuantity(),
+                entity.getUnit(),
+                entity.getUnitPrice(),
+                entity.getLineTotal()
+        );
     }
 
     @Transactional(readOnly = true)

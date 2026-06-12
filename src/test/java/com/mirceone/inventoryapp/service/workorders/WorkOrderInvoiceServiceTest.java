@@ -4,6 +4,8 @@ import com.mirceone.inventoryapp.config.AppIntegrationProperties;
 import com.mirceone.inventoryapp.model.FirmWorkOrderEntity;
 import com.mirceone.inventoryapp.model.InvoiceProcessingStatus;
 import com.mirceone.inventoryapp.model.WorkOrderInvoiceEntity;
+import com.mirceone.inventoryapp.repository.InvoiceExtractionRepository;
+import com.mirceone.inventoryapp.repository.InvoiceLineItemRepository;
 import com.mirceone.inventoryapp.repository.UserRepository;
 import com.mirceone.inventoryapp.repository.WorkOrderInvoiceRepository;
 import com.mirceone.inventoryapp.service.firms.access.FirmAccessService;
@@ -56,6 +58,10 @@ class WorkOrderInvoiceServiceTest {
     private BlobStorage blobStorage;
     @Mock
     private InvoiceProcessingService processingService;
+    @Mock
+    private InvoiceExtractionRepository extractionRepository;
+    @Mock
+    private InvoiceLineItemRepository lineItemRepository;
 
     private WorkOrderInvoiceService invoiceService;
 
@@ -73,7 +79,9 @@ class WorkOrderInvoiceServiceTest {
                 userRepository,
                 blobStorage,
                 new AfterCommitExecutor(),
-                processingService
+                processingService,
+                extractionRepository,
+                lineItemRepository
         );
         when(props.getFeatures()).thenReturn(features);
         when(features.isWorkOrderEnabled()).thenReturn(true);

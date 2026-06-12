@@ -34,6 +34,13 @@ public class StubAiService implements AiService {
             }
             return "{\"folder\":\"" + folder.replace("\"", "\\\"") + "\"}";
         }
+        if (userPrompt != null && userPrompt.contains("Extract the structured data from this invoice")) {
+            return """
+                    {"supplier":"Stub Supplier SRL","invoiceNumber":"STUB-001",\
+                    "invoiceDate":"2026-01-01","currency":"RON","total":100.00,\
+                    "lineItems":[{"description":"Stub Product","sku":"STUB-SKU",\
+                    "quantity":2,"unit":"buc","unitPrice":50.00,"lineTotal":100.00}]}""";
+        }
         String safe = userPrompt == null ? "" : userPrompt.replace("\"", "\\\"");
         return "{\"stub\":true,\"prompt\":\"" + safe + "\"}";
     }

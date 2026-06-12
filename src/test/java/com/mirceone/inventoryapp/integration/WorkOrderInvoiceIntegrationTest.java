@@ -1,7 +1,10 @@
 package com.mirceone.inventoryapp.integration;
 
+import com.mirceone.inventoryapp.model.InvoiceExtractionStatus;
 import com.mirceone.inventoryapp.model.InvoiceProcessingStatus;
 import com.mirceone.inventoryapp.model.UserEntity;
+import com.mirceone.inventoryapp.service.workorders.ExtractionDetail;
+import com.mirceone.inventoryapp.service.workorders.invoices.extraction.InvoiceStructuringService;
 import com.mirceone.inventoryapp.repository.UserRepository;
 import com.mirceone.inventoryapp.service.auth.AuthContracts;
 import com.mirceone.inventoryapp.service.auth.AuthService;
@@ -47,6 +50,8 @@ class WorkOrderInvoiceIntegrationTest extends IntegrationTestBase {
     private WorkOrderInvoiceService invoiceService;
     @Autowired
     private InvoiceProcessingService processingService;
+    @Autowired
+    private InvoiceStructuringService structuringService;
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
@@ -112,6 +117,58 @@ class WorkOrderInvoiceIntegrationTest extends IntegrationTestBase {
                 Integer.class,
                 workOrder.id()
         ));
+    }
+
+    @Test
+    void structuresLineItemsFromReadyInvoice() throws Exception {
+        authService.signup(new AuthContracts.SignupSpec("invoice-extract@example.com", "password123", "Extract IT"));
+        UUID userId = userRepository.findByEmailIgnoreCase("invoice-extract@example.com").orElseThrow().getId();
+
+        FirmContracts.FirmSummary firm =
+                firmService.createFirm(userId, new FirmContracts.CreateFirmSpec("Firm Extract"));
+        WorkOrderSummary workOrder = workOrderService.createWorkOrder(
+                userId, firm.id(),
+                new WorkOrderContracts.CreateWorkOrderSpec(
+                        "Renovare", "Client", "Bucharest", null,
+                        LocalDate.now(ZoneOffset.UTC).plusDays(14)));
+
+        MockMultipartFile pdf = new MockMultipartFile(
+                "file", "factura.pdf", "application/pdf", "%PDF-1.4".getBytes(StandardCharsets.UTF_8));
+        InvoiceSummary uploaded = invoiceService.upload(userId, firm.id(), workOrder.id(), pdf);
+
+        waitUntilReady(uploaded.id(), firm.id(), workOrder.id(), userId);
+
+        // The READY invoice enqueues a PENDING extraction; drive the structuring worker to completion.
+        ExtractionDetail extraction = waitUntilExtracted(userId, firm.id(), workOrder.id(), uploaded.id());
+
+        assertEquals(InvoiceExtractionStatus.READY, extraction.status());
+        assertEquals("Stub Supplier SRL", extraction.supplierName());
+        assertEquals(1, extraction.lineItems().size());
+        ExtractionDetail.Line line = extraction.lineItems().getFirst();
+        assertEquals("Stub Product", line.rawDescription());
+        assertEquals("STUB-SKU", line.sku());
+        assertEquals(0, line.quantity().compareTo(new java.math.BigDecimal("2")));
+        assertEquals(0, line.unitPrice().compareTo(new java.math.BigDecimal("50.00")));
+    }
+
+    private ExtractionDetail waitUntilExtracted(UUID userId, UUID firmId, UUID workOrderId, UUID invoiceId)
+            throws Exception {
+        for (int i = 0; i < 30; i++) {
+            structuringService.processPendingBatch(5);
+            try {
+                ExtractionDetail extraction = invoiceService.getExtraction(userId, firmId, workOrderId, invoiceId);
+                if (extraction.status() == InvoiceExtractionStatus.READY) {
+                    return extraction;
+                }
+                if (extraction.status() == InvoiceExtractionStatus.FAILED) {
+                    fail("Invoice extraction failed: " + extraction.error());
+                }
+            } catch (org.springframework.web.server.ResponseStatusException notYet) {
+                // extraction row not created yet
+            }
+            TimeUnit.MILLISECONDS.sleep(100);
+        }
+        return fail("Invoice extraction did not reach READY status in time");
     }
 
     private void waitUntilReady(UUID invoiceId, UUID firmId, UUID workOrderId, UUID userId) throws Exception {

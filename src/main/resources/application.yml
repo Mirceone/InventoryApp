@@ -82,6 +82,7 @@ app:
     routes-enabled: ${APP_FEATURES_ROUTES:true}
     work-order-enabled: ${APP_FEATURES_WORK_ORDER:true}
     work-order-ai-enabled: ${APP_FEATURES_WORK_ORDER_AI:true}
+    invoice-extraction-enabled: ${APP_FEATURES_INVOICE_EXTRACTION:true}
     ops-enabled: ${APP_FEATURES_OPS:true}
 
   ai:
@@ -119,6 +120,8 @@ app:
       - image/
     processing-poll-interval: ${APP_INVOICES_PROCESSING_POLL_INTERVAL:2s}
     processing-batch-size: ${APP_INVOICES_PROCESSING_BATCH_SIZE:5}
+    structuring-poll-interval: ${APP_INVOICES_STRUCTURING_POLL_INTERVAL:3s}
+    structuring-batch-size: ${APP_INVOICES_STRUCTURING_BATCH_SIZE:5}
     # Full path if not on PATH, e.g. ${user.dir}/.venv-markitdown/bin/markitdown or python3 -m markitdown
     markitdown-command: ${APP_INVOICES_MARKITDOWN_COMMAND:markitdown}
     markitdown-timeout: ${APP_INVOICES_MARKITDOWN_TIMEOUT:120s}
