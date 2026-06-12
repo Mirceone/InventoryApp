@@ -52,8 +52,7 @@ public class InventoryService {
     }
 
     public InventoryContracts.ProductSummary createProduct(UUID userId, UUID firmId, InventoryContracts.CreateProductSpec request) {
-        firmAccessService.requirePermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
-        firmAccessService.requireFirmOperationalForUser(firmId, userId);
+        firmAccessService.requireOperationalPermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
 
         boolean reorderEnabled = request.reorderEnabled() != null ? request.reorderEnabled() : true;
         CategoryEntity category = resolveCategory(firmId, request.categoryId());
@@ -82,8 +81,7 @@ public class InventoryService {
     }
 
     public InventoryContracts.ProductSummary updateProduct(UUID userId, UUID firmId, UUID productId, InventoryContracts.UpdateProductSpec request) {
-        firmAccessService.requirePermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
-        firmAccessService.requireFirmOperationalForUser(firmId, userId);
+        firmAccessService.requireOperationalPermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
         if (request.name() == null && request.sku() == null && request.reorderEnabled() == null && request.reorderThreshold() == null
                 && request.categoryId() == null && request.imgUrl() == null
                 && request.preferredRouteStopId() == null && request.clearPreferredRouteStop() == null) {
@@ -122,8 +120,7 @@ public class InventoryService {
     }
 
     public List<InventoryContracts.BuyListLine> listBuyList(UUID userId, UUID firmId) {
-        firmAccessService.requirePermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
-        firmAccessService.requireFirmOperationalForUser(firmId, userId);
+        firmAccessService.requireOperationalPermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
 
         return productRepository.findNeedingRestock(firmId, defaultReorderThreshold).stream()
                 .map(this::toBuyListItem)
@@ -131,8 +128,7 @@ public class InventoryService {
     }
 
     public List<InventoryContracts.ProductSummary> listProducts(UUID userId, UUID firmId) {
-        firmAccessService.requirePermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
-        firmAccessService.requireFirmOperationalForUser(firmId, userId);
+        firmAccessService.requireOperationalPermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
 
         return productRepository.findAllByFirmId(firmId)
                 .stream()
@@ -141,8 +137,7 @@ public class InventoryService {
     }
 
     public InventoryContracts.ProductSummary setStock(UUID userId, UUID firmId, UUID productId, int quantity) {
-        firmAccessService.requirePermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
-        firmAccessService.requireFirmOperationalForUser(firmId, userId);
+        firmAccessService.requireOperationalPermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
 
         ProductEntity product = productRepository.findByIdAndFirmId(productId, firmId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found"));
@@ -158,8 +153,7 @@ public class InventoryService {
     }
 
     public InventoryContracts.ProductSummary adjustStock(UUID userId, UUID firmId, UUID productId, int delta) {
-        firmAccessService.requirePermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
-        firmAccessService.requireFirmOperationalForUser(firmId, userId);
+        firmAccessService.requireOperationalPermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
 
         ProductEntity product = productRepository.findByIdAndFirmId(productId, firmId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found"));

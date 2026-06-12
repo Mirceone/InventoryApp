@@ -8,6 +8,7 @@ import com.mirceone.inventoryapp.repository.UserRepository;
 import com.mirceone.inventoryapp.service.auth.AuthService;
 import com.mirceone.inventoryapp.service.email.EmailService;
 import com.mirceone.inventoryapp.service.firms.access.FirmAccessService;
+import com.mirceone.inventoryapp.service.support.AfterCommitExecutor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -59,6 +60,7 @@ class FirmInvitationServiceTest {
                 invitationTokenService,
                 emailService,
                 authService,
+                new AfterCommitExecutor(),
                 "http://localhost:5173",
                 604800L
         );
@@ -73,7 +75,8 @@ class FirmInvitationServiceTest {
                         new FirmInvitationContracts.CreateInvitationSpec("a@b.com", MemberRole.OWNER)
                 )
         );
-        verifyNoInteractions(firmInvitationRepository);
+        verify(firmInvitationRepository, never()).save(any(FirmInvitationEntity.class));
+        verifyNoInteractions(emailService);
     }
 
     @Test
@@ -107,5 +110,27 @@ class FirmInvitationServiceTest {
     @Test
     void maskEmailHidesLocalPart() {
         assertEquals("i***@example.com", FirmInvitationService.maskEmail("invitee@example.com"));
+    }
+
+    @Test
+    void previewExpiredInvitationDoesNotPersistState() {
+        FirmInvitationEntity invitation = new FirmInvitationEntity(
+                firmId,
+                "invitee@example.com",
+                MemberRole.MEMBER,
+                "hashed-token",
+                ownerId,
+                Instant.now().minusSeconds(60)
+        );
+        when(invitationTokenService.hashToken("expired-token")).thenReturn("hashed-token");
+        when(firmInvitationRepository.findByTokenHash("hashed-token")).thenReturn(Optional.of(invitation));
+
+        ResponseStatusException ex = assertThrows(
+                ResponseStatusException.class,
+                () -> service.previewInvitation("expired-token")
+        );
+
+        assertEquals(401, ex.getStatusCode().value());
+        verify(firmInvitationRepository, never()).save(any(FirmInvitationEntity.class));
     }
 }

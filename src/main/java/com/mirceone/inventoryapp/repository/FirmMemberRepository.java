@@ -1,6 +1,7 @@
 package com.mirceone.inventoryapp.repository;
 
 import com.mirceone.inventoryapp.model.FirmMemberEntity;
+import com.mirceone.inventoryapp.model.MemberRole;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -16,4 +17,8 @@ public interface FirmMemberRepository extends JpaRepository<FirmMemberEntity, UU
     List<FirmMemberEntity> findAllByUserId(UUID userId);
 
     List<FirmMemberEntity> findAllByFirmIdOrderByCreatedAtAsc(UUID firmId);
+
+    long countByFirmId(UUID firmId);
+
+    long countByFirmIdAndRole(UUID firmId, MemberRole role);
 }

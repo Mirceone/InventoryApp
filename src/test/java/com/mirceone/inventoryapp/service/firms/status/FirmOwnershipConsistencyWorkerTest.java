@@ -2,9 +2,11 @@ package com.mirceone.inventoryapp.service.firms.status;
 
 import com.mirceone.inventoryapp.model.FirmEntity;
 import com.mirceone.inventoryapp.model.FirmMemberEntity;
+import com.mirceone.inventoryapp.model.FirmStatus;
 import com.mirceone.inventoryapp.model.MemberRole;
 import com.mirceone.inventoryapp.repository.FirmMemberRepository;
 import com.mirceone.inventoryapp.repository.FirmRepository;
+import com.mirceone.inventoryapp.service.firms.FirmService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,13 +30,13 @@ class FirmOwnershipConsistencyWorkerTest {
     @Mock
     private FirmMemberRepository firmMemberRepository;
     @Mock
-    private FirmStatusSystemService firmStatusSystemService;
+    private FirmService firmService;
 
     private FirmOwnershipConsistencyWorker worker;
 
     @BeforeEach
     void setUp() {
-        worker = new FirmOwnershipConsistencyWorker(firmRepository, firmMemberRepository, firmStatusSystemService);
+        worker = new FirmOwnershipConsistencyWorker(firmRepository, firmMemberRepository, firmService);
     }
 
     @Test
@@ -46,10 +48,11 @@ class FirmOwnershipConsistencyWorkerTest {
 
         when(firmRepository.findAll()).thenReturn(List.of(firm));
         when(firmMemberRepository.findByFirmIdAndUserId(firmId, ownerUserId)).thenReturn(Optional.empty());
+        when(firmMemberRepository.countByFirmIdAndRole(firmId, MemberRole.OWNER)).thenReturn(0L);
 
         worker.verifyOwnershipConsistency();
 
-        verify(firmStatusSystemService).markCritical(firmId, FirmOwnershipConsistencyWorker.INCONSISTENT_OWNER_MESSAGE);
+        verify(firmService).setFirmStatusSystem(firmId, FirmStatus.CRITICAL, FirmOwnershipConsistencyWorker.INCONSISTENT_OWNER_MESSAGE);
     }
 
     @Test
@@ -62,9 +65,33 @@ class FirmOwnershipConsistencyWorkerTest {
 
         when(firmRepository.findAll()).thenReturn(List.of(firm));
         when(firmMemberRepository.findByFirmIdAndUserId(firmId, ownerUserId)).thenReturn(Optional.of(ownerMember));
+        when(firmMemberRepository.countByFirmIdAndRole(firmId, MemberRole.OWNER)).thenReturn(1L);
 
         worker.verifyOwnershipConsistency();
 
-        verifyNoInteractions(firmStatusSystemService);
+        verifyNoInteractions(firmService);
+    }
+
+    @Test
+    void recoveredOwnershipConsistencyReactivatesFirm() {
+        UUID ownerUserId = UUID.randomUUID();
+        FirmEntity firm = new FirmEntity(ownerUserId, "Demo");
+        UUID firmId = UUID.randomUUID();
+        ReflectionTestUtils.setField(firm, "id", firmId);
+        ReflectionTestUtils.setField(firm, "status", FirmStatus.CRITICAL);
+        ReflectionTestUtils.setField(
+                firm,
+                "statusMessage",
+                FirmOwnershipConsistencyWorker.INCONSISTENT_OWNER_MESSAGE
+        );
+        FirmMemberEntity ownerMember = new FirmMemberEntity(firmId, ownerUserId, MemberRole.OWNER);
+
+        when(firmRepository.findAll()).thenReturn(List.of(firm));
+        when(firmMemberRepository.findByFirmIdAndUserId(firmId, ownerUserId)).thenReturn(Optional.of(ownerMember));
+        when(firmMemberRepository.countByFirmIdAndRole(firmId, MemberRole.OWNER)).thenReturn(1L);
+
+        worker.verifyOwnershipConsistency();
+
+        verify(firmService).setFirmStatusSystem(firmId, FirmStatus.ACTIVE, null);
     }
 }

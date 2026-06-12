@@ -17,6 +17,7 @@ import com.mirceone.inventoryapp.repository.NotificationRepository;
 import com.mirceone.inventoryapp.repository.UserRepository;
 import com.mirceone.inventoryapp.service.email.EmailService;
 import com.mirceone.inventoryapp.service.firms.access.FirmStatusCatalog;
+import com.mirceone.inventoryapp.service.support.AfterCommitExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
@@ -24,8 +25,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -55,6 +54,7 @@ public class NotificationService {
     private final UserRepository userRepository;
     private final EmailService emailService;
     private final ObjectMapper objectMapper;
+    private final AfterCommitExecutor afterCommitExecutor;
     private final TransactionTemplate requiresNewTransactionTemplate;
 
     public NotificationService(
@@ -64,6 +64,7 @@ public class NotificationService {
             UserRepository userRepository,
             EmailService emailService,
             ObjectMapper objectMapper,
+            AfterCommitExecutor afterCommitExecutor,
             PlatformTransactionManager transactionManager
     ) {
         this.notificationRepository = notificationRepository;
@@ -72,6 +73,7 @@ public class NotificationService {
         this.userRepository = userRepository;
         this.emailService = emailService;
         this.objectMapper = objectMapper;
+        this.afterCommitExecutor = afterCommitExecutor;
         this.requiresNewTransactionTemplate = new TransactionTemplate(transactionManager);
         this.requiresNewTransactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
@@ -84,6 +86,20 @@ public class NotificationService {
                 ? notificationRepository.findAllByRecipientUserIdAndReadAtIsNullOrderByCreatedAtDesc(userId, pageable).getContent()
                 : notificationRepository.findAllByRecipientUserIdOrderByCreatedAtDesc(userId, pageable).getContent();
         long unreadCount = notificationRepository.countByRecipientUserIdAndReadAtIsNull(userId);
+        return new NotificationContracts.NotificationInbox(
+                unreadCount,
+                items.stream().map(this::toSummary).toList()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public NotificationContracts.NotificationInbox listNotificationsForFirm(UUID userId, UUID firmId, int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, 100));
+        var pageable = PageRequest.of(0, safeLimit);
+        List<NotificationEntity> items = notificationRepository
+                .findAllByRecipientUserIdAndFirmIdOrderByCreatedAtDesc(userId, firmId, pageable)
+                .getContent();
+        long unreadCount = notificationRepository.countByRecipientUserIdAndFirmIdAndReadAtIsNull(userId, firmId);
         return new NotificationContracts.NotificationInbox(
                 unreadCount,
                 items.stream().map(this::toSummary).toList()
@@ -289,24 +305,7 @@ public class NotificationService {
     }
 
     private void runAfterCommit(String actionName, Runnable action) {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    runQuietly(actionName, action);
-                }
-            });
-        } else {
-            runQuietly(actionName, action);
-        }
-    }
-
-    private void runQuietly(String actionName, Runnable action) {
-        try {
-            action.run();
-        } catch (RuntimeException ex) {
-            log.error("Notification side effect failed action={}: {}", actionName, ex.getMessage(), ex);
-        }
+        afterCommitExecutor.executeQuietly("notification-" + actionName, log, action);
     }
 
     private void runInNewTransaction(Runnable action) {

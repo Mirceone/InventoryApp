@@ -1,5 +1,6 @@
 # Profil test: PostgreSQL dedicat (local + CI). Aceleasi migrari Flyway ca in productie
-# (classpath:db/migration din src/main/resources). La startup: clean + migrate (vezi IntegrationTestFlywayConfig).
+# (classpath:db/migration din src/main/resources). La startup: clean + migrate (vezi IntegrationTestFlywayConfig)
+# pe o schema izolata per run, configurata din IntegrationTestBase.
 #
 # Local: creeaza o data baza, ex. CREATE DATABASE inventoryapp_test;
 # Variabile: TEST_DB_URL, TEST_DB_USERNAME, TEST_DB_PASSWORD
@@ -22,7 +23,8 @@ spring:
 app:
   db:
     create-if-missing: false
-  features:
-    dossier-ai-enabled: false
-  documents:
-    organization-poll-interval: 365d
+  ai:
+    provider: stub
+  invoices:
+    extractor: stub
+    processing-poll-interval: 365d

@@ -11,6 +11,9 @@ import com.mirceone.inventoryapp.service.email.EmailService;
 import com.mirceone.inventoryapp.service.firms.access.FirmAccessService;
 import com.mirceone.inventoryapp.service.firms.access.FirmPermission;
 import com.mirceone.inventoryapp.service.firms.access.MemberRoleCatalog;
+import com.mirceone.inventoryapp.service.support.AfterCommitExecutor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +30,8 @@ import static org.springframework.http.HttpStatus.*;
 @Service
 public class FirmInvitationService {
 
+    private static final Logger log = LoggerFactory.getLogger(FirmInvitationService.class);
+
     private final FirmInvitationRepository firmInvitationRepository;
     private final FirmMemberRepository firmMemberRepository;
     private final FirmRepository firmRepository;
@@ -35,6 +40,7 @@ public class FirmInvitationService {
     private final FirmInvitationTokenService invitationTokenService;
     private final EmailService emailService;
     private final AuthService authService;
+    private final AfterCommitExecutor afterCommitExecutor;
     private final String frontendBaseUrl;
     private final long tokenTtlSeconds;
 
@@ -47,6 +53,7 @@ public class FirmInvitationService {
             FirmInvitationTokenService invitationTokenService,
             EmailService emailService,
             AuthService authService,
+            AfterCommitExecutor afterCommitExecutor,
             @Value("${app.frontend-url}") String frontendBaseUrl,
             @Value("${app.invitations.token-ttl-seconds:604800}") long tokenTtlSeconds
     ) {
@@ -58,6 +65,7 @@ public class FirmInvitationService {
         this.invitationTokenService = invitationTokenService;
         this.emailService = emailService;
         this.authService = authService;
+        this.afterCommitExecutor = afterCommitExecutor;
         this.frontendBaseUrl = stripTrailingSlash(frontendBaseUrl);
         this.tokenTtlSeconds = tokenTtlSeconds;
     }
@@ -68,8 +76,9 @@ public class FirmInvitationService {
             UUID inviterUserId,
             FirmInvitationContracts.CreateInvitationSpec spec
     ) {
-        firmAccessService.requirePermission(firmId, inviterUserId, FirmPermission.MEMBER_MANAGE);
-        firmAccessService.requireFirmOperational(firmId);
+        firmAccessService.requireOperationalPermission(firmId, inviterUserId, FirmPermission.MEMBER_MANAGE);
+        Instant now = Instant.now();
+        expireStaleInvitations(now);
 
         if (spec.role() != MemberRole.MEMBER) {
             throw new ResponseStatusException(BAD_REQUEST, "Only MEMBER role can be invited");
@@ -91,7 +100,7 @@ public class FirmInvitationService {
 
         String rawToken = invitationTokenService.generateRawToken();
         String tokenHash = invitationTokenService.hashToken(rawToken);
-        Instant expiresAt = Instant.now().plusSeconds(tokenTtlSeconds);
+        Instant expiresAt = now.plusSeconds(tokenTtlSeconds);
 
         FirmInvitationEntity invitation = new FirmInvitationEntity(
                 firmId, email, MemberRole.MEMBER, tokenHash, inviterUserId, expiresAt
@@ -99,12 +108,12 @@ public class FirmInvitationService {
         invitation = firmInvitationRepository.save(invitation);
 
         String inviteLink = frontendBaseUrl + "/accept-invitation?token=" + rawToken;
-        emailService.sendFirmInvitationEmail(
+        afterCommitExecutor.executeQuietly("firm-invitation-email", log, () -> emailService.sendFirmInvitationEmail(
                 email,
                 firm.getName(),
                 inviteLink,
                 MemberRoleCatalog.displayLabel(MemberRole.MEMBER)
-        );
+        ));
 
         return new FirmInvitationContracts.CreateInvitationResult(toSummary(invitation), rawToken);
     }
@@ -112,8 +121,11 @@ public class FirmInvitationService {
     @Transactional(readOnly = true)
     public List<FirmInvitationContracts.InvitationSummary> listPendingInvitations(UUID firmId, UUID requesterUserId) {
         firmAccessService.requirePermission(firmId, requesterUserId, FirmPermission.MEMBER_MANAGE);
-        expireStaleInvitations();
-        return firmInvitationRepository.findAllByFirmIdAndStatusOrderByCreatedAtDesc(firmId, FirmInvitationStatus.PENDING)
+        return firmInvitationRepository.findAllByFirmIdAndStatusAndExpiresAtGreaterThanEqualOrderByCreatedAtDesc(
+                        firmId,
+                        FirmInvitationStatus.PENDING,
+                        Instant.now()
+                )
                 .stream()
                 .map(this::toSummary)
                 .toList();
@@ -121,7 +133,7 @@ public class FirmInvitationService {
 
     @Transactional
     public void revokeInvitation(UUID firmId, UUID requesterUserId, UUID invitationId) {
-        firmAccessService.requirePermission(firmId, requesterUserId, FirmPermission.MEMBER_MANAGE);
+        firmAccessService.requireOperationalPermission(firmId, requesterUserId, FirmPermission.MEMBER_MANAGE);
 
         FirmInvitationEntity invitation = firmInvitationRepository.findById(invitationId)
                 .filter(inv -> inv.getFirmId().equals(firmId))
@@ -137,7 +149,7 @@ public class FirmInvitationService {
 
     @Transactional(readOnly = true)
     public FirmInvitationContracts.InvitationPreview previewInvitation(String rawToken) {
-        FirmInvitationEntity invitation = resolveActiveInvitation(rawToken);
+        FirmInvitationEntity invitation = requireActiveInvitation(rawToken, Instant.now(), false);
         FirmEntity firm = requireFirm(invitation.getFirmId());
         boolean accountExists = userRepository.findByEmailIgnoreCase(invitation.getEmail()).isPresent();
 
@@ -157,7 +169,9 @@ public class FirmInvitationService {
             FirmInvitationContracts.AcceptInvitationSpec spec,
             UUID authenticatedUserId
     ) {
-        FirmInvitationEntity invitation = resolveActiveInvitation(spec.token());
+        Instant now = Instant.now();
+        expireStaleInvitations(now);
+        FirmInvitationEntity invitation = requireActiveInvitation(spec.token(), now, true);
         String inviteEmail = invitation.getEmail();
         UUID firmId = invitation.getFirmId();
 
@@ -187,7 +201,7 @@ public class FirmInvitationService {
         firmMemberRepository.save(new FirmMemberEntity(firmId, user.getId(), invitation.getRole()));
 
         invitation.setStatus(FirmInvitationStatus.ACCEPTED);
-        invitation.setAcceptedAt(Instant.now());
+        invitation.setAcceptedAt(now);
         firmInvitationRepository.save(invitation);
 
         return authService.issueTokenPairForUser(user.getId());
@@ -212,36 +226,37 @@ public class FirmInvitationService {
         }
     }
 
-    private FirmInvitationEntity resolveActiveInvitation(String rawToken) {
-        if (rawToken == null || rawToken.isBlank()) {
-            throw new ResponseStatusException(BAD_REQUEST, "Invitation token is required");
-        }
-        expireStaleInvitations();
-        String tokenHash = invitationTokenService.hashToken(rawToken.trim());
+    private FirmInvitationEntity requireActiveInvitation(String rawToken, Instant now, boolean persistExpiredStatus) {
+        String tokenHash = normalizeTokenHash(rawToken);
         FirmInvitationEntity invitation = firmInvitationRepository.findByTokenHash(tokenHash)
                 .orElseThrow(() -> new ResponseStatusException(UNAUTHORIZED, "Invalid or expired invitation"));
 
         if (invitation.getStatus() != FirmInvitationStatus.PENDING) {
             throw new ResponseStatusException(UNAUTHORIZED, "Invalid or expired invitation");
         }
-        if (invitation.getExpiresAt().isBefore(Instant.now())) {
-            invitation.setStatus(FirmInvitationStatus.EXPIRED);
-            firmInvitationRepository.save(invitation);
+        if (invitation.getExpiresAt().isBefore(now)) {
+            if (persistExpiredStatus) {
+                invitation.setStatus(FirmInvitationStatus.EXPIRED);
+                firmInvitationRepository.save(invitation);
+            }
             throw new ResponseStatusException(UNAUTHORIZED, "Invalid or expired invitation");
         }
         return invitation;
     }
 
-    private void expireStaleInvitations() {
-        Instant now = Instant.now();
-        List<FirmInvitationEntity> expired = firmInvitationRepository.findAllByStatusAndExpiresAtBefore(
+    private String normalizeTokenHash(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            throw new ResponseStatusException(BAD_REQUEST, "Invitation token is required");
+        }
+        return invitationTokenService.hashToken(rawToken.trim());
+    }
+
+    private void expireStaleInvitations(Instant now) {
+        firmInvitationRepository.expirePendingInvitations(
                 FirmInvitationStatus.PENDING,
+                FirmInvitationStatus.EXPIRED,
                 now
         );
-        for (FirmInvitationEntity inv : expired) {
-            inv.setStatus(FirmInvitationStatus.EXPIRED);
-            firmInvitationRepository.save(inv);
-        }
     }
 
     private FirmEntity requireFirm(UUID firmId) {

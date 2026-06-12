@@ -1,5 +1,6 @@
 package com.mirceone.inventoryapp.api.inventory;
 
+import com.mirceone.inventoryapp.api.support.CurrentUserId;
 import com.mirceone.inventoryapp.service.inventory.InventoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -7,8 +8,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -35,11 +34,10 @@ public class ProductController {
             @ApiResponse(responseCode = "403", description = "Not firm member")
     })
     public ProductResponse createProduct(
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentUserId UUID userId,
             @PathVariable UUID firmId,
             @Valid @RequestBody CreateProductRequest request
     ) {
-        UUID userId = UUID.fromString(jwt.getSubject());
         return InventoryWebMapper.toProductResponse(
                 inventoryService.createProduct(userId, firmId, InventoryWebMapper.toCreateProductSpec(request))
         );
@@ -53,10 +51,9 @@ public class ProductController {
             @ApiResponse(responseCode = "403", description = "Not firm member")
     })
     public List<ProductResponse> listProducts(
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentUserId UUID userId,
             @PathVariable UUID firmId
     ) {
-        UUID userId = UUID.fromString(jwt.getSubject());
         return InventoryWebMapper.toProductResponseList(inventoryService.listProducts(userId, firmId));
     }
 
@@ -68,10 +65,9 @@ public class ProductController {
             @ApiResponse(responseCode = "403", description = "Not firm member")
     })
     public List<BuyListItemResponse> listBuyList(
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentUserId UUID userId,
             @PathVariable UUID firmId
     ) {
-        UUID userId = UUID.fromString(jwt.getSubject());
         return InventoryWebMapper.toBuyListResponseList(inventoryService.listBuyList(userId, firmId));
     }
 
@@ -85,12 +81,11 @@ public class ProductController {
             @ApiResponse(responseCode = "404", description = "Product not found")
     })
     public ProductResponse updateProduct(
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentUserId UUID userId,
             @PathVariable UUID firmId,
             @PathVariable UUID productId,
             @Valid @RequestBody UpdateProductRequest request
     ) {
-        UUID userId = UUID.fromString(jwt.getSubject());
         return InventoryWebMapper.toProductResponse(
                 inventoryService.updateProduct(userId, firmId, productId, InventoryWebMapper.toUpdateProductSpec(request))
         );
@@ -106,12 +101,11 @@ public class ProductController {
             @ApiResponse(responseCode = "404", description = "Product not found")
     })
     public ProductResponse setStock(
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentUserId UUID userId,
             @PathVariable UUID firmId,
             @PathVariable UUID productId,
             @Valid @RequestBody SetStockRequest request
     ) {
-        UUID userId = UUID.fromString(jwt.getSubject());
         return InventoryWebMapper.toProductResponse(
                 inventoryService.setStock(userId, firmId, productId, request.quantity())
         );
@@ -127,12 +121,11 @@ public class ProductController {
             @ApiResponse(responseCode = "404", description = "Product not found")
     })
     public ProductResponse adjustStock(
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentUserId UUID userId,
             @PathVariable UUID firmId,
             @PathVariable UUID productId,
             @Valid @RequestBody AdjustStockRequest request
     ) {
-        UUID userId = UUID.fromString(jwt.getSubject());
         return InventoryWebMapper.toProductResponse(
                 inventoryService.adjustStock(userId, firmId, productId, request.delta())
         );

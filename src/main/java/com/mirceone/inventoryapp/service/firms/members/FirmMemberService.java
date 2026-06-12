@@ -14,11 +14,12 @@ import com.mirceone.inventoryapp.service.email.EmailService;
 import com.mirceone.inventoryapp.service.firms.access.FirmAccessService;
 import com.mirceone.inventoryapp.service.firms.access.FirmPermission;
 import com.mirceone.inventoryapp.service.firms.access.MemberRoleCatalog;
+import com.mirceone.inventoryapp.service.support.AfterCommitExecutor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.security.SecureRandom;
@@ -31,10 +32,15 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
+import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 @Service
 public class FirmMemberService {
+
+    private static final Logger log = LoggerFactory.getLogger(FirmMemberService.class);
+    private static final String OWNERSHIP_INCONSISTENT_MESSAGE =
+            "Firm ownership is inconsistent; resolve it before transferring ownership";
 
     private final FirmMemberRepository firmMemberRepository;
     private final FirmRepository firmRepository;
@@ -42,6 +48,7 @@ public class FirmMemberService {
     private final FirmOwnershipTransferConfirmationRepository ownershipTransferConfirmationRepository;
     private final FirmAccessService firmAccessService;
     private final EmailService emailService;
+    private final AfterCommitExecutor afterCommitExecutor;
     private final long ownershipTransferConfirmationTtlSeconds;
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -52,6 +59,7 @@ public class FirmMemberService {
             FirmOwnershipTransferConfirmationRepository ownershipTransferConfirmationRepository,
             FirmAccessService firmAccessService,
             EmailService emailService,
+            AfterCommitExecutor afterCommitExecutor,
             @Value("${app.firms.ownership-transfer-confirmation-ttl-seconds:900}") long ownershipTransferConfirmationTtlSeconds
     ) {
         this.firmMemberRepository = firmMemberRepository;
@@ -60,6 +68,7 @@ public class FirmMemberService {
         this.ownershipTransferConfirmationRepository = ownershipTransferConfirmationRepository;
         this.firmAccessService = firmAccessService;
         this.emailService = emailService;
+        this.afterCommitExecutor = afterCommitExecutor;
         this.ownershipTransferConfirmationTtlSeconds = ownershipTransferConfirmationTtlSeconds;
     }
 
@@ -84,8 +93,7 @@ public class FirmMemberService {
             UUID memberUserId,
             FirmMemberContracts.UpdateMemberRoleSpec spec
     ) {
-        firmAccessService.requirePermission(firmId, requesterUserId, FirmPermission.MEMBER_MANAGE);
-        firmAccessService.requireFirmOperational(firmId);
+        firmAccessService.requireOperationalPermission(firmId, requesterUserId, FirmPermission.MEMBER_MANAGE);
 
         if (spec.role() == null) {
             throw new ResponseStatusException(BAD_REQUEST, "Member role is required");
@@ -106,8 +114,7 @@ public class FirmMemberService {
 
     @Transactional
     public void removeMember(UUID firmId, UUID requesterUserId, UUID memberUserId) {
-        firmAccessService.requirePermission(firmId, requesterUserId, FirmPermission.MEMBER_MANAGE);
-        firmAccessService.requireFirmOperational(firmId);
+        firmAccessService.requireOperationalPermission(firmId, requesterUserId, FirmPermission.MEMBER_MANAGE);
 
         FirmMemberEntity member = requireMember(firmId, memberUserId);
         if (member.getRole() == MemberRole.OWNER) {
@@ -137,7 +144,7 @@ public class FirmMemberService {
                 expiresAt
         ));
 
-        scheduleAfterCommit(() -> emailService.sendOwnershipTransferConfirmationCodeEmail(
+        afterCommitExecutor.executeQuietly("ownership-transfer-confirmation-email", log, () -> emailService.sendOwnershipTransferConfirmationCodeEmail(
                 context.currentOwnerUser().getEmail(),
                 context.firm().getName(),
                 displayNameOrEmail(context.newOwnerUser()),
@@ -181,7 +188,7 @@ public class FirmMemberService {
         ownershipTransferConfirmationRepository.delete(confirmation);
         performOwnershipTransfer(context.firm(), context.currentOwnerMember(), context.newOwnerMember());
 
-        scheduleAfterCommit(() -> {
+        afterCommitExecutor.executeQuietly("ownership-transfer-complete-email", log, () -> {
             emailService.sendOwnershipTransferCompletedForPreviousOwnerEmail(
                     context.currentOwnerUser().getEmail(),
                     context.firm().getName(),
@@ -212,8 +219,7 @@ public class FirmMemberService {
     }
 
     private TransferContext prepareTransferContext(UUID firmId, UUID requesterUserId, UUID newOwnerUserId) {
-        firmAccessService.requirePermission(firmId, requesterUserId, FirmPermission.MEMBER_MANAGE);
-        firmAccessService.requireFirmOperational(firmId);
+        firmAccessService.requireOperationalPermission(firmId, requesterUserId, FirmPermission.MEMBER_MANAGE);
 
         if (newOwnerUserId == null) {
             throw new ResponseStatusException(BAD_REQUEST, "New owner userId is required");
@@ -235,6 +241,7 @@ public class FirmMemberService {
 
         UserEntity currentOwnerUser = requireUser(requesterUserId);
         UserEntity newOwnerUser = requireUser(newOwnerUserId);
+        ensureOwnershipIsConsistent(firm, currentOwner, nextOwner);
         return new TransferContext(firm, currentOwner, nextOwner, currentOwnerUser, newOwnerUser);
     }
 
@@ -253,6 +260,19 @@ public class FirmMemberService {
         firmRepository.save(firm);
     }
 
+    private void ensureOwnershipIsConsistent(FirmEntity firm, FirmMemberEntity currentOwner, FirmMemberEntity nextOwner) {
+        if (!firm.getOwnerUserId().equals(currentOwner.getUserId())) {
+            throw new ResponseStatusException(CONFLICT, OWNERSHIP_INCONSISTENT_MESSAGE);
+        }
+        if (currentOwner.getRole() != MemberRole.OWNER || nextOwner.getRole() == MemberRole.OWNER) {
+            throw new ResponseStatusException(CONFLICT, OWNERSHIP_INCONSISTENT_MESSAGE);
+        }
+        long ownerMemberships = firmMemberRepository.countByFirmIdAndRole(firm.getId(), MemberRole.OWNER);
+        if (ownerMemberships != 1) {
+            throw new ResponseStatusException(CONFLICT, OWNERSHIP_INCONSISTENT_MESSAGE);
+        }
+    }
+
     private void cleanupExpiredOwnershipTransferConfirmations() {
         ownershipTransferConfirmationRepository.deleteByExpiresAtBefore(Instant.now());
     }
@@ -263,19 +283,6 @@ public class FirmMemberService {
 
     private long ttlMinutes() {
         return Math.max(1L, Math.ceilDiv(ownershipTransferConfirmationTtlSeconds, 60L));
-    }
-
-    private void scheduleAfterCommit(Runnable action) {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    action.run();
-                }
-            });
-        } else {
-            action.run();
-        }
     }
 
     private static String displayNameOrEmail(UserEntity user) {

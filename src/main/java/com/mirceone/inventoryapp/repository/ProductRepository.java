@@ -12,6 +12,8 @@ import java.util.UUID;
 
 public interface ProductRepository extends JpaRepository<ProductEntity, UUID> {
 
+    long countByFirmId(UUID firmId);
+
     @Query("""
             SELECT DISTINCT p FROM ProductEntity p JOIN FETCH p.category
             WHERE p.firmId = :firmId

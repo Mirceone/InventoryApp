@@ -42,7 +42,7 @@ La `POST /firms`, firma nouă are `status: "ACTIVE"`.
 
 ## Erori la operații blocate
 
-Orice endpoint pe `/firms/{firmId}/...` (produse, categorii, dosare, documente) returnează **403** cu mesaj:
+Orice endpoint pe `/firms/{firmId}/...` (produse, categorii, work orders, documente) returnează **403** cu mesaj:
 
 - PAUSED: `Firm operations are paused`
 - CRITICAL: `Firm is in critical state` sau `Firm is in critical state: {statusMessage}`
@@ -75,7 +75,7 @@ export function isFirmOperational(firm: Pick<Firm, "status">): boolean {
 2. La schimbare de status, frontend-ul poate citi și inbox-ul din [`ghid-frontend-notifications.md`](./ghid-frontend-notifications.md); backend-ul emite `FIRM_STATUS_CHANGED` pentru update-uri manuale și automate.
 3. Dacă `!isFirmOperational(activeFirm)`:
    - Banner galben (PAUSED) sau roșu (CRITICAL) cu `statusMessage` dacă există.
-   - Dezactivează navigarea inventar / dosare.
+   - Dezactivează navigarea inventar / work orders.
    - Păstrează acces Settings: schimbare status + ștergere firmă (OWNER).
 4. Formular status în Settings: select `ACTIVE` | `PAUSED` | `CRITICAL`, câmp mesaj pentru CRITICAL.
 

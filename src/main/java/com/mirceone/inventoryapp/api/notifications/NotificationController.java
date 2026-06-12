@@ -1,5 +1,6 @@
 package com.mirceone.inventoryapp.api.notifications;
 
+import com.mirceone.inventoryapp.api.support.CurrentUserId;
 import com.mirceone.inventoryapp.service.notifications.NotificationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -9,8 +10,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -42,11 +41,10 @@ public class NotificationController {
             @ApiResponse(responseCode = "401", description = "Unauthorized")
     })
     public NotificationInboxResponse listNotifications(
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentUserId UUID userId,
             @RequestParam(defaultValue = "false") boolean unreadOnly,
             @RequestParam(defaultValue = "50") @Min(1) @Max(100) int limit
     ) {
-        UUID userId = UUID.fromString(jwt.getSubject());
         return NotificationWebMapper.toInboxResponse(notificationService.listNotifications(userId, unreadOnly, limit));
     }
 
@@ -59,10 +57,9 @@ public class NotificationController {
             @ApiResponse(responseCode = "404", description = "Notification not found")
     })
     public void markRead(
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentUserId UUID userId,
             @PathVariable UUID notificationId
     ) {
-        UUID userId = UUID.fromString(jwt.getSubject());
         notificationService.markRead(userId, notificationId);
     }
 
@@ -73,8 +70,7 @@ public class NotificationController {
             @ApiResponse(responseCode = "204", description = "All notifications marked as read"),
             @ApiResponse(responseCode = "401", description = "Unauthorized")
     })
-    public void markAllRead(@AuthenticationPrincipal Jwt jwt) {
-        UUID userId = UUID.fromString(jwt.getSubject());
+    public void markAllRead(@CurrentUserId UUID userId) {
         notificationService.markAllRead(userId);
     }
 }

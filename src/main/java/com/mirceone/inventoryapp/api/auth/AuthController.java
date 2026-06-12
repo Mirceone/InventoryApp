@@ -1,5 +1,6 @@
 package com.mirceone.inventoryapp.api.auth;
 
+import com.mirceone.inventoryapp.api.support.CurrentUserId;
 import com.mirceone.inventoryapp.service.auth.AuthService;
 import com.mirceone.inventoryapp.service.auth.PasswordResetService;
 import com.mirceone.inventoryapp.service.firms.members.FirmInvitationService;
@@ -9,8 +10,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -88,8 +87,7 @@ public class AuthController {
             @ApiResponse(responseCode = "200", description = "All sessions revoked"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid access token")
     })
-    public void logoutAll(@AuthenticationPrincipal Jwt jwt) {
-        UUID userId = UUID.fromString(jwt.getSubject());
+    public void logoutAll(@CurrentUserId UUID userId) {
         authService.logoutAll(userId);
     }
 
@@ -137,10 +135,9 @@ public class AuthController {
             @ApiResponse(responseCode = "409", description = "Already a firm member")
     })
     public AuthResponse acceptInvitation(
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentUserId(required = false) UUID userId,
             @Valid @RequestBody AcceptInvitationRequest request
     ) {
-        UUID userId = jwt != null ? UUID.fromString(jwt.getSubject()) : null;
         return AuthWebMapper.toAuthResponse(
                 firmInvitationService.acceptInvitation(AuthWebMapper.toAcceptInvitationSpec(request), userId)
         );
@@ -152,8 +149,7 @@ public class AuthController {
             @ApiResponse(responseCode = "200", description = "Current user returned"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid access token")
     })
-    public MeResponse me(@AuthenticationPrincipal Jwt jwt) {
-        UUID userId = UUID.fromString(jwt.getSubject());
+    public MeResponse me(@CurrentUserId UUID userId) {
         return AuthWebMapper.toMeResponse(authService.getMe(userId));
     }
 }

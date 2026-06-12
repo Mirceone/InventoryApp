@@ -1,5 +1,6 @@
 package com.mirceone.inventoryapp.api.inventory;
 
+import com.mirceone.inventoryapp.api.support.CurrentUserId;
 import com.mirceone.inventoryapp.service.inventory.CategoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -8,8 +9,6 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -45,11 +44,10 @@ public class CategoryController {
             @ApiResponse(responseCode = "409", description = "Category already exists")
     })
     public CategoryResponse createCategory(
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentUserId UUID userId,
             @PathVariable UUID firmId,
             @Valid @RequestBody CreateCategoryRequest request
     ) {
-        UUID userId = UUID.fromString(jwt.getSubject());
         return InventoryWebMapper.toCategoryResponse(categoryService.createCategory(userId, firmId, request.name()));
     }
 
@@ -64,12 +62,11 @@ public class CategoryController {
             @ApiResponse(responseCode = "409", description = "Category already exists")
     })
     public CategoryResponse updateCategory(
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentUserId UUID userId,
             @PathVariable UUID firmId,
             @PathVariable UUID categoryId,
             @Valid @RequestBody UpdateCategoryRequest request
     ) {
-        UUID userId = UUID.fromString(jwt.getSubject());
         return InventoryWebMapper.toCategoryResponse(
                 categoryService.updateCategory(userId, firmId, categoryId, request.name())
         );
@@ -86,11 +83,10 @@ public class CategoryController {
             @ApiResponse(responseCode = "404", description = "Category not found")
     })
     public void deleteCategory(
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentUserId UUID userId,
             @PathVariable UUID firmId,
             @PathVariable UUID categoryId
     ) {
-        UUID userId = UUID.fromString(jwt.getSubject());
         categoryService.deleteCategory(userId, firmId, categoryId);
     }
 
@@ -102,10 +98,9 @@ public class CategoryController {
             @ApiResponse(responseCode = "403", description = "Not firm member")
     })
     public List<CategoryResponse> listCategories(
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentUserId UUID userId,
             @PathVariable UUID firmId
     ) {
-        UUID userId = UUID.fromString(jwt.getSubject());
         return InventoryWebMapper.toCategoryResponseList(categoryService.listCategories(userId, firmId));
     }
 }

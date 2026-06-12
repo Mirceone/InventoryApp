@@ -1,5 +1,6 @@
 package com.mirceone.inventoryapp.api.firms.members;
 
+import com.mirceone.inventoryapp.api.support.CurrentUserId;
 import com.mirceone.inventoryapp.service.firms.members.FirmInvitationService;
 import com.mirceone.inventoryapp.service.firms.members.FirmMemberService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -9,8 +10,6 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -37,8 +36,7 @@ public class FirmInvitationController {
             @ApiResponse(responseCode = "401", description = "Unauthorized"),
             @ApiResponse(responseCode = "403", description = "Forbidden")
     })
-    public List<FirmMemberResponse> listMembers(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID firmId) {
-        UUID userId = UUID.fromString(jwt.getSubject());
+    public List<FirmMemberResponse> listMembers(@CurrentUserId UUID userId, @PathVariable UUID firmId) {
         return FirmMembersWebMapper.toMemberResponseList(firmMemberService.listMembers(firmId, userId));
     }
 
@@ -52,12 +50,11 @@ public class FirmInvitationController {
             @ApiResponse(responseCode = "404", description = "Member not found")
     })
     public FirmMemberResponse updateMemberRole(
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentUserId UUID userId,
             @PathVariable UUID firmId,
             @PathVariable UUID memberUserId,
             @Valid @RequestBody UpdateMemberRoleRequest request
     ) {
-        UUID userId = UUID.fromString(jwt.getSubject());
         return FirmMembersWebMapper.toMemberResponse(
                 firmMemberService.updateMemberRole(
                         firmId,
@@ -78,11 +75,10 @@ public class FirmInvitationController {
             @ApiResponse(responseCode = "404", description = "Member not found")
     })
     public void removeMember(
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentUserId UUID userId,
             @PathVariable UUID firmId,
             @PathVariable UUID memberUserId
     ) {
-        UUID userId = UUID.fromString(jwt.getSubject());
         firmMemberService.removeMember(firmId, userId, memberUserId);
     }
 
@@ -97,11 +93,10 @@ public class FirmInvitationController {
             @ApiResponse(responseCode = "404", description = "Member or firm not found")
     })
     public void requestOwnershipTransfer(
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentUserId UUID userId,
             @PathVariable UUID firmId,
             @Valid @RequestBody TransferOwnershipRequest request
     ) {
-        UUID userId = UUID.fromString(jwt.getSubject());
         firmMemberService.requestOwnershipTransfer(
                 firmId,
                 userId,
@@ -120,11 +115,10 @@ public class FirmInvitationController {
             @ApiResponse(responseCode = "404", description = "Member or firm not found")
     })
     public void confirmOwnershipTransfer(
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentUserId UUID userId,
             @PathVariable UUID firmId,
             @Valid @RequestBody ConfirmOwnershipTransferRequest request
     ) {
-        UUID userId = UUID.fromString(jwt.getSubject());
         firmMemberService.confirmOwnershipTransfer(
                 firmId,
                 userId,
@@ -143,11 +137,10 @@ public class FirmInvitationController {
             @ApiResponse(responseCode = "409", description = "Already member or pending invite exists")
     })
     public FirmInvitationResponse createInvitation(
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentUserId UUID userId,
             @PathVariable UUID firmId,
             @Valid @RequestBody InviteMemberRequest request
     ) {
-        UUID userId = UUID.fromString(jwt.getSubject());
         return FirmMembersWebMapper.toInvitationResponse(
                 firmInvitationService.createInvitation(firmId, userId, FirmMembersWebMapper.toCreateSpec(request))
                         .summary()
@@ -162,10 +155,9 @@ public class FirmInvitationController {
             @ApiResponse(responseCode = "403", description = "Forbidden")
     })
     public List<FirmInvitationResponse> listPendingInvitations(
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentUserId UUID userId,
             @PathVariable UUID firmId
     ) {
-        UUID userId = UUID.fromString(jwt.getSubject());
         return FirmMembersWebMapper.toInvitationResponseList(
                 firmInvitationService.listPendingInvitations(firmId, userId)
         );
@@ -181,11 +173,10 @@ public class FirmInvitationController {
             @ApiResponse(responseCode = "404", description = "Invitation not found")
     })
     public void revokeInvitation(
-            @AuthenticationPrincipal Jwt jwt,
+            @CurrentUserId UUID userId,
             @PathVariable UUID firmId,
             @PathVariable UUID invitationId
     ) {
-        UUID userId = UUID.fromString(jwt.getSubject());
         firmInvitationService.revokeInvitation(firmId, userId, invitationId);
     }
 }

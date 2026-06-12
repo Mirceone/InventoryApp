@@ -4,7 +4,10 @@ import com.mirceone.inventoryapp.model.ProviderType;
 import com.mirceone.inventoryapp.model.UserEntity;
 import com.mirceone.inventoryapp.repository.UserRepository;
 import com.mirceone.inventoryapp.service.email.EmailService;
+import com.mirceone.inventoryapp.service.support.AfterCommitExecutor;
 import jakarta.transaction.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -18,11 +21,14 @@ import static org.springframework.http.HttpStatus.BAD_REQUEST;
 @Service
 public class PasswordResetService {
 
+    private static final Logger log = LoggerFactory.getLogger(PasswordResetService.class);
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final PasswordResetTokenService passwordResetTokenService;
     private final RefreshTokenService refreshTokenService;
     private final EmailService emailService;
+    private final AfterCommitExecutor afterCommitExecutor;
     private final String frontendBaseUrl;
 
     public PasswordResetService(
@@ -31,6 +37,7 @@ public class PasswordResetService {
             PasswordResetTokenService passwordResetTokenService,
             RefreshTokenService refreshTokenService,
             EmailService emailService,
+            AfterCommitExecutor afterCommitExecutor,
             @Value("${app.frontend-url}") String frontendBaseUrl
     ) {
         this.userRepository = userRepository;
@@ -38,6 +45,7 @@ public class PasswordResetService {
         this.passwordResetTokenService = passwordResetTokenService;
         this.refreshTokenService = refreshTokenService;
         this.emailService = emailService;
+        this.afterCommitExecutor = afterCommitExecutor;
         this.frontendBaseUrl = stripTrailingSlash(frontendBaseUrl);
     }
 
@@ -51,7 +59,8 @@ public class PasswordResetService {
             }
             String rawToken = passwordResetTokenService.create(user.getId());
             String resetLink = frontendBaseUrl + "/reset-password?token=" + rawToken;
-            emailService.sendPasswordResetEmail(user.getEmail(), resetLink);
+            afterCommitExecutor.executeQuietly("password-reset-email", log,
+                    () -> emailService.sendPasswordResetEmail(user.getEmail(), resetLink));
         });
     }
 

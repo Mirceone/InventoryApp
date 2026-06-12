@@ -41,18 +41,6 @@ public class ClientDocumentEntity {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    @Column(name = "ai_summary", columnDefinition = "text")
-    private String aiSummary;
-
-    @Column(name = "ai_tags", columnDefinition = "text")
-    private String aiTags;
-
-    @Column(name = "ai_model", length = 255)
-    private String aiModel;
-
-    @Column(name = "ai_processed_at")
-    private Instant aiProcessedAt;
-
     protected ClientDocumentEntity() {
     }
 
@@ -113,37 +101,5 @@ public class ClientDocumentEntity {
 
     public Instant getCreatedAt() {
         return createdAt;
-    }
-
-    public String getAiSummary() {
-        return aiSummary;
-    }
-
-    public void setAiSummary(String aiSummary) {
-        this.aiSummary = aiSummary;
-    }
-
-    public String getAiTags() {
-        return aiTags;
-    }
-
-    public void setAiTags(String aiTags) {
-        this.aiTags = aiTags;
-    }
-
-    public String getAiModel() {
-        return aiModel;
-    }
-
-    public void setAiModel(String aiModel) {
-        this.aiModel = aiModel;
-    }
-
-    public Instant getAiProcessedAt() {
-        return aiProcessedAt;
-    }
-
-    public void setAiProcessedAt(Instant aiProcessedAt) {
-        this.aiProcessedAt = aiProcessedAt;
     }
 }

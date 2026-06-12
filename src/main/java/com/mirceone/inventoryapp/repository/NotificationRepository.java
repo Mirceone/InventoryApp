@@ -16,7 +16,15 @@ public interface NotificationRepository extends JpaRepository<NotificationEntity
 
     Page<NotificationEntity> findAllByRecipientUserIdOrderByCreatedAtDesc(UUID recipientUserId, Pageable pageable);
 
+    Page<NotificationEntity> findAllByRecipientUserIdAndFirmIdOrderByCreatedAtDesc(
+            UUID recipientUserId,
+            UUID firmId,
+            Pageable pageable
+    );
+
     Page<NotificationEntity> findAllByRecipientUserIdAndReadAtIsNullOrderByCreatedAtDesc(UUID recipientUserId, Pageable pageable);
+
+    long countByRecipientUserIdAndFirmIdAndReadAtIsNull(UUID recipientUserId, UUID firmId);
 
     long countByRecipientUserIdAndReadAtIsNull(UUID recipientUserId);
 

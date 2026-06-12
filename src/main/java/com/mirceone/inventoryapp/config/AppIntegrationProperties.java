@@ -10,17 +10,14 @@ import java.util.List;
 public class AppIntegrationProperties {
 
     private final Features features = new Features();
-    private final Ollama ollama = new Ollama();
     private final Storage storage = new Storage();
     private final Ops ops = new Ops();
     private final Documents documents = new Documents();
+    private final Invoices invoices = new Invoices();
+    private final Ai ai = new Ai();
 
     public Features getFeatures() {
         return features;
-    }
-
-    public Ollama getOllama() {
-        return ollama;
     }
 
     public Storage getStorage() {
@@ -35,10 +32,17 @@ public class AppIntegrationProperties {
         return documents;
     }
 
+    public Invoices getInvoices() {
+        return invoices;
+    }
+
+    public Ai getAi() {
+        return ai;
+    }
+
     public static class Features {
         private boolean routesEnabled = true;
-        private boolean dossierEnabled = true;
-        private boolean dossierAiEnabled = true;
+        private boolean workOrderEnabled = true;
         private boolean opsEnabled = true;
 
         public boolean isRoutesEnabled() {
@@ -49,20 +53,12 @@ public class AppIntegrationProperties {
             this.routesEnabled = routesEnabled;
         }
 
-        public boolean isDossierEnabled() {
-            return dossierEnabled;
+        public boolean isWorkOrderEnabled() {
+            return workOrderEnabled;
         }
 
-        public void setDossierEnabled(boolean dossierEnabled) {
-            this.dossierEnabled = dossierEnabled;
-        }
-
-        public boolean isDossierAiEnabled() {
-            return dossierAiEnabled;
-        }
-
-        public void setDossierAiEnabled(boolean dossierAiEnabled) {
-            this.dossierAiEnabled = dossierAiEnabled;
+        public void setWorkOrderEnabled(boolean workOrderEnabled) {
+            this.workOrderEnabled = workOrderEnabled;
         }
 
         public boolean isOpsEnabled() {
@@ -71,54 +67,6 @@ public class AppIntegrationProperties {
 
         public void setOpsEnabled(boolean opsEnabled) {
             this.opsEnabled = opsEnabled;
-        }
-    }
-
-    public static class Ollama {
-        private String baseUrl = "http://127.0.0.1:11434";
-        private String model = "gemma4:e4b";
-        private Duration chatTimeout = Duration.ofSeconds(120);
-        private boolean sendDocumentContent = false;
-        private int maxContentChars = 8_000;
-
-        public String getBaseUrl() {
-            return baseUrl;
-        }
-
-        public void setBaseUrl(String baseUrl) {
-            this.baseUrl = baseUrl;
-        }
-
-        public String getModel() {
-            return model;
-        }
-
-        public void setModel(String model) {
-            this.model = model;
-        }
-
-        public Duration getChatTimeout() {
-            return chatTimeout;
-        }
-
-        public void setChatTimeout(Duration chatTimeout) {
-            this.chatTimeout = chatTimeout;
-        }
-
-        public boolean isSendDocumentContent() {
-            return sendDocumentContent;
-        }
-
-        public void setSendDocumentContent(boolean sendDocumentContent) {
-            this.sendDocumentContent = sendDocumentContent;
-        }
-
-        public int getMaxContentChars() {
-            return maxContentChars;
-        }
-
-        public void setMaxContentChars(int maxContentChars) {
-            this.maxContentChars = maxContentChars;
         }
     }
 
@@ -157,13 +105,54 @@ public class AppIntegrationProperties {
     }
 
     public static class Documents {
-        /** Maximum page size for GET /firms/{firmId}/documents. */
+        /** Maximum page size for file listings. */
         private int pageMaxSize = 100;
         private int batchMaxFiles = 50;
         private long batchMaxTotalBytes = 3L * 1024 * 1024 * 1024;
-        private Duration organizationPollInterval = Duration.ofSeconds(2);
-        private boolean aiSubfoldersEnabled = true;
-        private int organizationBatchSize = 20;
+
+        public int getPageMaxSize() {
+            return pageMaxSize;
+        }
+
+        public void setPageMaxSize(int pageMaxSize) {
+            this.pageMaxSize = pageMaxSize;
+        }
+
+        public int getBatchMaxFiles() {
+            return batchMaxFiles;
+        }
+
+        public void setBatchMaxFiles(int batchMaxFiles) {
+            this.batchMaxFiles = batchMaxFiles;
+        }
+
+        public long getBatchMaxTotalBytes() {
+            return batchMaxTotalBytes;
+        }
+
+        public void setBatchMaxTotalBytes(long batchMaxTotalBytes) {
+            this.batchMaxTotalBytes = batchMaxTotalBytes;
+        }
+    }
+
+    public static class Invoices {
+        private int pageMaxSize = 100;
+        private int batchMaxFiles = 50;
+        private long batchMaxTotalBytes = 3L * 1024 * 1024 * 1024;
+        private List<String> allowedMimePrefixes = new ArrayList<>(List.of(
+                "application/pdf",
+                "image/"
+        ));
+        private Duration processingPollInterval = Duration.ofSeconds(2);
+        private int processingBatchSize = 5;
+        private String markitdownCommand = "markitdown";
+        private Duration markitdownTimeout = Duration.ofSeconds(120);
+        private String extractor = "markitdown";
+        private boolean ocrFallbackEnabled = true;
+        private String ocrPythonCommand = "python3";
+        private String ocrScriptPath = "";
+        private String ocrLanguages = "ro,en";
+        private Duration ocrTimeout = Duration.ofMinutes(5);
 
         public int getPageMaxSize() {
             return pageMaxSize;
@@ -189,28 +178,230 @@ public class AppIntegrationProperties {
             this.batchMaxTotalBytes = batchMaxTotalBytes;
         }
 
-        public Duration getOrganizationPollInterval() {
-            return organizationPollInterval;
+        public List<String> getAllowedMimePrefixes() {
+            return allowedMimePrefixes;
         }
 
-        public void setOrganizationPollInterval(Duration organizationPollInterval) {
-            this.organizationPollInterval = organizationPollInterval;
+        public void setAllowedMimePrefixes(List<String> allowedMimePrefixes) {
+            this.allowedMimePrefixes = allowedMimePrefixes;
         }
 
-        public boolean isAiSubfoldersEnabled() {
-            return aiSubfoldersEnabled;
+        public Duration getProcessingPollInterval() {
+            return processingPollInterval;
         }
 
-        public void setAiSubfoldersEnabled(boolean aiSubfoldersEnabled) {
-            this.aiSubfoldersEnabled = aiSubfoldersEnabled;
+        public void setProcessingPollInterval(Duration processingPollInterval) {
+            this.processingPollInterval = processingPollInterval;
         }
 
-        public int getOrganizationBatchSize() {
-            return organizationBatchSize;
+        public int getProcessingBatchSize() {
+            return processingBatchSize;
         }
 
-        public void setOrganizationBatchSize(int organizationBatchSize) {
-            this.organizationBatchSize = organizationBatchSize;
+        public void setProcessingBatchSize(int processingBatchSize) {
+            this.processingBatchSize = processingBatchSize;
+        }
+
+        public String getMarkitdownCommand() {
+            return markitdownCommand;
+        }
+
+        public void setMarkitdownCommand(String markitdownCommand) {
+            this.markitdownCommand = markitdownCommand;
+        }
+
+        public Duration getMarkitdownTimeout() {
+            return markitdownTimeout;
+        }
+
+        public void setMarkitdownTimeout(Duration markitdownTimeout) {
+            this.markitdownTimeout = markitdownTimeout;
+        }
+
+        public String getExtractor() {
+            return extractor;
+        }
+
+        public void setExtractor(String extractor) {
+            this.extractor = extractor;
+        }
+
+        public boolean isOcrFallbackEnabled() {
+            return ocrFallbackEnabled;
+        }
+
+        public void setOcrFallbackEnabled(boolean ocrFallbackEnabled) {
+            this.ocrFallbackEnabled = ocrFallbackEnabled;
+        }
+
+        public String getOcrPythonCommand() {
+            return ocrPythonCommand;
+        }
+
+        public void setOcrPythonCommand(String ocrPythonCommand) {
+            this.ocrPythonCommand = ocrPythonCommand;
+        }
+
+        public String getOcrScriptPath() {
+            return ocrScriptPath;
+        }
+
+        public void setOcrScriptPath(String ocrScriptPath) {
+            this.ocrScriptPath = ocrScriptPath;
+        }
+
+        public String getOcrLanguages() {
+            return ocrLanguages;
+        }
+
+        public void setOcrLanguages(String ocrLanguages) {
+            this.ocrLanguages = ocrLanguages;
+        }
+
+        public Duration getOcrTimeout() {
+            return ocrTimeout;
+        }
+
+        public void setOcrTimeout(Duration ocrTimeout) {
+            this.ocrTimeout = ocrTimeout;
+        }
+    }
+
+    public static class Ai {
+        private String provider = "mlx";
+        private String baseUrl = "http://127.0.0.1:8000/v1";
+        private String apiKey = "mlx-local";
+        private String model = "mlx-community/gemma-4-12B-it-qat-4bit";
+        private String huggingfaceRepo = "mlx-community/gemma-4-12B-it-qat-4bit";
+        private String modelCacheDir = "";
+        private boolean autoDownloadModel = true;
+        private boolean autoStartServer = true;
+        private int serverPort = 8000;
+        private Duration modelDownloadTimeout = Duration.ofMinutes(60);
+        private Duration serverStartTimeout = Duration.ofMinutes(10);
+        private String mlxPythonCommand = "python3";
+        private String ensureModelScriptPath = "";
+        private Duration timeout = Duration.ofSeconds(120);
+        private int maxRetries = 2;
+
+        public String getProvider() {
+            return provider;
+        }
+
+        public void setProvider(String provider) {
+            this.provider = provider;
+        }
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
+
+        public String getApiKey() {
+            return apiKey;
+        }
+
+        public void setApiKey(String apiKey) {
+            this.apiKey = apiKey;
+        }
+
+        public String getModel() {
+            return model;
+        }
+
+        public void setModel(String model) {
+            this.model = model;
+        }
+
+        public String getHuggingfaceRepo() {
+            return huggingfaceRepo;
+        }
+
+        public void setHuggingfaceRepo(String huggingfaceRepo) {
+            this.huggingfaceRepo = huggingfaceRepo;
+        }
+
+        public String getModelCacheDir() {
+            return modelCacheDir;
+        }
+
+        public void setModelCacheDir(String modelCacheDir) {
+            this.modelCacheDir = modelCacheDir;
+        }
+
+        public boolean isAutoDownloadModel() {
+            return autoDownloadModel;
+        }
+
+        public void setAutoDownloadModel(boolean autoDownloadModel) {
+            this.autoDownloadModel = autoDownloadModel;
+        }
+
+        public boolean isAutoStartServer() {
+            return autoStartServer;
+        }
+
+        public void setAutoStartServer(boolean autoStartServer) {
+            this.autoStartServer = autoStartServer;
+        }
+
+        public int getServerPort() {
+            return serverPort;
+        }
+
+        public void setServerPort(int serverPort) {
+            this.serverPort = serverPort;
+        }
+
+        public Duration getModelDownloadTimeout() {
+            return modelDownloadTimeout;
+        }
+
+        public void setModelDownloadTimeout(Duration modelDownloadTimeout) {
+            this.modelDownloadTimeout = modelDownloadTimeout;
+        }
+
+        public Duration getServerStartTimeout() {
+            return serverStartTimeout;
+        }
+
+        public void setServerStartTimeout(Duration serverStartTimeout) {
+            this.serverStartTimeout = serverStartTimeout;
+        }
+
+        public String getMlxPythonCommand() {
+            return mlxPythonCommand;
+        }
+
+        public void setMlxPythonCommand(String mlxPythonCommand) {
+            this.mlxPythonCommand = mlxPythonCommand;
+        }
+
+        public String getEnsureModelScriptPath() {
+            return ensureModelScriptPath;
+        }
+
+        public void setEnsureModelScriptPath(String ensureModelScriptPath) {
+            this.ensureModelScriptPath = ensureModelScriptPath;
+        }
+
+        public Duration getTimeout() {
+            return timeout;
+        }
+
+        public void setTimeout(Duration timeout) {
+            this.timeout = timeout;
+        }
+
+        public int getMaxRetries() {
+            return maxRetries;
+        }
+
+        public void setMaxRetries(int maxRetries) {
+            this.maxRetries = maxRetries;
         }
     }
 

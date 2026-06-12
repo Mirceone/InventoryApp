@@ -1,18 +1,19 @@
 package com.mirceone.inventoryapp.service.firms;
 
-import com.mirceone.inventoryapp.model.FirmDocumentEntity;
 import com.mirceone.inventoryapp.model.FirmEntity;
 import com.mirceone.inventoryapp.model.FirmMemberEntity;
 import com.mirceone.inventoryapp.model.FirmStatus;
 import com.mirceone.inventoryapp.model.MemberRole;
-import com.mirceone.inventoryapp.repository.FirmDocumentRepository;
 import com.mirceone.inventoryapp.repository.FirmMemberRepository;
 import com.mirceone.inventoryapp.repository.FirmRepository;
 import com.mirceone.inventoryapp.repository.FirmStatusHistoryRepository;
-import com.mirceone.inventoryapp.service.documents.storage.DocumentStorage;
+import com.mirceone.inventoryapp.repository.WorkOrderFileRepository;
+import com.mirceone.inventoryapp.repository.WorkOrderInvoiceRepository;
 import com.mirceone.inventoryapp.service.firms.access.FirmAccessService;
+import com.mirceone.inventoryapp.service.storage.BlobStorage;
 import com.mirceone.inventoryapp.service.inventory.CategoryService;
 import com.mirceone.inventoryapp.service.notifications.NotificationService;
+import com.mirceone.inventoryapp.service.support.AfterCommitExecutor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,11 +40,13 @@ class FirmServiceTest {
     @Mock
     private FirmMemberRepository firmMemberRepository;
     @Mock
-    private FirmDocumentRepository firmDocumentRepository;
+    private WorkOrderFileRepository workOrderFileRepository;
+    @Mock
+    private WorkOrderInvoiceRepository workOrderInvoiceRepository;
     @Mock
     private FirmStatusHistoryRepository firmStatusHistoryRepository;
     @Mock
-    private DocumentStorage documentStorage;
+    private BlobStorage blobStorage;
     @Mock
     private CategoryService categoryService;
     @Mock
@@ -61,12 +64,14 @@ class FirmServiceTest {
         firmService = new FirmService(
                 firmRepository,
                 firmMemberRepository,
-                firmDocumentRepository,
+                workOrderFileRepository,
+                workOrderInvoiceRepository,
                 firmStatusHistoryRepository,
-                documentStorage,
+                blobStorage,
                 categoryService,
                 firmAccessService,
-                notificationService
+                notificationService,
+                new AfterCommitExecutor()
         );
         userId = UUID.randomUUID();
         firmId = UUID.randomUUID();
@@ -122,16 +127,16 @@ class FirmServiceTest {
     }
 
     @Test
-    void deleteFirmAsOwnerDeletesFirmAndCollectsStorageKeys() {
+    void deleteFirmAsOwnerDeletesFilesFirmAndBlobPrefix() throws Exception {
         when(firmMemberRepository.findByFirmIdAndUserId(firmId, userId))
                 .thenReturn(Optional.of(new FirmMemberEntity(firmId, userId, MemberRole.OWNER)));
         when(firmRepository.findById(firmId)).thenReturn(Optional.of(firm));
-        FirmDocumentEntity doc = mock(FirmDocumentEntity.class);
-        when(doc.getStorageKey()).thenReturn(firmId + "/dossiers/x/f.pdf");
-        when(firmDocumentRepository.findAllByFirmId(firmId)).thenReturn(List.of(doc));
 
         firmService.deleteFirm(userId, firmId);
 
+        verify(workOrderFileRepository).deleteByFirmId(firmId);
+        verify(workOrderInvoiceRepository).deleteByFirmId(firmId);
         verify(firmRepository).deleteById(firmId);
+        verify(blobStorage).deleteByPrefix(firmId + "/");
     }
 }

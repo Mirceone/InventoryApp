@@ -179,7 +179,7 @@ Dacă un MEMBER apelează PATCH/DELETE (bug UI sau API manual), backend răspund
 - **Salvează:** `PATCH /firms/{activeFirm.id}` cu `{ name }`.
 - **Ștergere:** modal cu confirmare (tastează numele firmei), apoi `DELETE`, apoi `refreshFirms()` și navigare dacă nu mai rămân firme.
 
-### 3. Restul aplicației (inventar, dosare)
+### 3. Restul aplicației (inventar, work orders)
 
 - **Nu** restricționa încă după rol — MEMBER are aceleași drepturi ca OWNER la inventar/documente.
 - Nu ascunde upload-uri sau CRUD produse pentru MEMBER în faza 1.
@@ -268,8 +268,8 @@ function firmHasRoleFields(firm: unknown): firm is Firm {
 **Afișăm „Admin” în loc de „Owner”?**  
 Da, folosește `roleDisplayLabel` din API sau mapare locală echivalentă.
 
-**MEMBER poate șterge dosare?**  
-Da, în faza 1 — restricțiile pe dosare/inventar vor veni cu roluri granulare (faza 3).
+**MEMBER poate șterge work orders?**  
+Da, în faza 1 — restricțiile pe work orders/inventar vor veni cu roluri granulare (faza 3).
 
 **Cum adaug un angajat?**  
 Da, prin flow-ul de invitații și management membri din [`ghid-frontend-invitations.md`](./ghid-frontend-invitations.md).

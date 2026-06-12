@@ -15,6 +15,7 @@ import com.mirceone.inventoryapp.repository.FirmRepository;
 import com.mirceone.inventoryapp.repository.NotificationRepository;
 import com.mirceone.inventoryapp.repository.UserRepository;
 import com.mirceone.inventoryapp.service.email.EmailService;
+import com.mirceone.inventoryapp.service.support.AfterCommitExecutor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -71,6 +72,7 @@ class NotificationServiceTest {
                 userRepository,
                 emailService,
                 new ObjectMapper(),
+                new AfterCommitExecutor(),
                 transactionManager
         );
     }

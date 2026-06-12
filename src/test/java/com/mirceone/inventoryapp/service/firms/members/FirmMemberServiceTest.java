@@ -12,6 +12,7 @@ import com.mirceone.inventoryapp.repository.FirmRepository;
 import com.mirceone.inventoryapp.repository.UserRepository;
 import com.mirceone.inventoryapp.service.email.EmailService;
 import com.mirceone.inventoryapp.service.firms.access.FirmAccessService;
+import com.mirceone.inventoryapp.service.support.AfterCommitExecutor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -61,6 +62,7 @@ class FirmMemberServiceTest {
                 ownershipTransferConfirmationRepository,
                 firmAccessService,
                 emailService,
+                new AfterCommitExecutor(),
                 900
         );
         firmId = UUID.randomUUID();
@@ -133,6 +135,7 @@ class FirmMemberServiceTest {
         when(firmRepository.findById(firmId)).thenReturn(Optional.of(firm));
         when(firmMemberRepository.findByFirmIdAndUserId(firmId, ownerUserId)).thenReturn(Optional.of(currentOwner));
         when(firmMemberRepository.findByFirmIdAndUserId(firmId, memberUserId)).thenReturn(Optional.of(nextOwner));
+        when(firmMemberRepository.countByFirmIdAndRole(firmId, MemberRole.OWNER)).thenReturn(1L);
         when(userRepository.findById(ownerUserId)).thenReturn(Optional.of(owner));
         when(userRepository.findById(memberUserId)).thenReturn(Optional.of(member));
 
@@ -169,6 +172,7 @@ class FirmMemberServiceTest {
         when(firmRepository.findById(firmId)).thenReturn(Optional.of(firm));
         when(firmMemberRepository.findByFirmIdAndUserId(firmId, ownerUserId)).thenReturn(Optional.of(currentOwner));
         when(firmMemberRepository.findByFirmIdAndUserId(firmId, memberUserId)).thenReturn(Optional.of(nextOwner));
+        when(firmMemberRepository.countByFirmIdAndRole(firmId, MemberRole.OWNER)).thenReturn(1L);
         when(userRepository.findById(ownerUserId)).thenReturn(Optional.of(owner));
         when(userRepository.findById(memberUserId)).thenReturn(Optional.of(member));
         when(ownershipTransferConfirmationRepository
@@ -186,5 +190,35 @@ class FirmMemberServiceTest {
         assertEquals(memberUserId, firm.getOwnerUserId());
         verify(firmRepository).save(firm);
         verify(ownershipTransferConfirmationRepository).delete(confirmation);
+    }
+
+    @Test
+    void requestOwnershipTransferRejectsInconsistentOwnerState() {
+        FirmEntity firm = new FirmEntity(ownerUserId, "Demo");
+        ReflectionTestUtils.setField(firm, "id", firmId);
+        FirmMemberEntity currentOwner = new FirmMemberEntity(firmId, ownerUserId, MemberRole.OWNER);
+        FirmMemberEntity nextOwner = new FirmMemberEntity(firmId, memberUserId, MemberRole.MEMBER);
+        UserEntity owner = new UserEntity("owner@example.com", "hash", ProviderType.LOCAL, "owner@example.com", "Owner");
+        UserEntity member = new UserEntity("member@example.com", "hash", ProviderType.LOCAL, "member@example.com", "Member");
+        ReflectionTestUtils.setField(owner, "id", ownerUserId);
+        ReflectionTestUtils.setField(member, "id", memberUserId);
+        ReflectionTestUtils.setField(firm, "ownerUserId", UUID.randomUUID());
+
+        when(firmRepository.findById(firmId)).thenReturn(Optional.of(firm));
+        when(firmMemberRepository.findByFirmIdAndUserId(firmId, ownerUserId)).thenReturn(Optional.of(currentOwner));
+        when(firmMemberRepository.findByFirmIdAndUserId(firmId, memberUserId)).thenReturn(Optional.of(nextOwner));
+        when(userRepository.findById(ownerUserId)).thenReturn(Optional.of(owner));
+        when(userRepository.findById(memberUserId)).thenReturn(Optional.of(member));
+
+        ResponseStatusException ex = assertThrows(
+                ResponseStatusException.class,
+                () -> firmMemberService.requestOwnershipTransfer(
+                        firmId,
+                        ownerUserId,
+                        new FirmMemberContracts.TransferOwnershipSpec(memberUserId)
+                )
+        );
+
+        assertEquals(409, ex.getStatusCode().value());
     }
 }

@@ -1,34 +1,33 @@
 package com.mirceone.inventoryapp.service.firms;
 
-import com.mirceone.inventoryapp.model.FirmDocumentEntity;
 import com.mirceone.inventoryapp.model.FirmEntity;
 import com.mirceone.inventoryapp.model.FirmMemberEntity;
 import com.mirceone.inventoryapp.model.FirmStatusChangeSource;
 import com.mirceone.inventoryapp.model.FirmStatusHistoryEntity;
 import com.mirceone.inventoryapp.model.FirmStatus;
 import com.mirceone.inventoryapp.model.MemberRole;
-import com.mirceone.inventoryapp.repository.FirmDocumentRepository;
 import com.mirceone.inventoryapp.repository.FirmMemberRepository;
 import com.mirceone.inventoryapp.repository.FirmRepository;
 import com.mirceone.inventoryapp.repository.FirmStatusHistoryRepository;
-import com.mirceone.inventoryapp.service.documents.storage.DocumentStorage;
+import com.mirceone.inventoryapp.repository.WorkOrderFileRepository;
+import com.mirceone.inventoryapp.repository.WorkOrderInvoiceRepository;
+import com.mirceone.inventoryapp.service.storage.BlobStorage;
+import com.mirceone.inventoryapp.service.workorders.WorkOrderStorageKeys;
 import com.mirceone.inventoryapp.service.firms.access.FirmAccessService;
 import com.mirceone.inventoryapp.service.firms.access.FirmPermission;
 import com.mirceone.inventoryapp.service.firms.access.FirmStatusCatalog;
 import com.mirceone.inventoryapp.service.firms.access.MemberRoleCatalog;
 import com.mirceone.inventoryapp.service.inventory.CategoryService;
 import com.mirceone.inventoryapp.service.notifications.NotificationService;
+import com.mirceone.inventoryapp.service.support.AfterCommitExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -44,31 +43,37 @@ public class FirmService {
 
     private final FirmRepository firmRepository;
     private final FirmMemberRepository firmMemberRepository;
-    private final FirmDocumentRepository firmDocumentRepository;
+    private final WorkOrderFileRepository workOrderFileRepository;
+    private final WorkOrderInvoiceRepository workOrderInvoiceRepository;
     private final FirmStatusHistoryRepository firmStatusHistoryRepository;
-    private final DocumentStorage documentStorage;
+    private final BlobStorage blobStorage;
     private final CategoryService categoryService;
     private final FirmAccessService firmAccessService;
     private final NotificationService notificationService;
+    private final AfterCommitExecutor afterCommitExecutor;
 
     public FirmService(
             FirmRepository firmRepository,
             FirmMemberRepository firmMemberRepository,
-            FirmDocumentRepository firmDocumentRepository,
+            WorkOrderFileRepository workOrderFileRepository,
+            WorkOrderInvoiceRepository workOrderInvoiceRepository,
             FirmStatusHistoryRepository firmStatusHistoryRepository,
-            DocumentStorage documentStorage,
+            BlobStorage blobStorage,
             CategoryService categoryService,
             FirmAccessService firmAccessService,
-            NotificationService notificationService
+            NotificationService notificationService,
+            AfterCommitExecutor afterCommitExecutor
     ) {
         this.firmRepository = firmRepository;
         this.firmMemberRepository = firmMemberRepository;
-        this.firmDocumentRepository = firmDocumentRepository;
+        this.workOrderFileRepository = workOrderFileRepository;
+        this.workOrderInvoiceRepository = workOrderInvoiceRepository;
         this.firmStatusHistoryRepository = firmStatusHistoryRepository;
-        this.documentStorage = documentStorage;
+        this.blobStorage = blobStorage;
         this.categoryService = categoryService;
         this.firmAccessService = firmAccessService;
         this.notificationService = notificationService;
+        this.afterCommitExecutor = afterCommitExecutor;
     }
 
     @Transactional
@@ -103,8 +108,7 @@ public class FirmService {
 
     @Transactional
     public FirmContracts.FirmSummary renameFirm(UUID userId, UUID firmId, FirmContracts.UpdateFirmSpec spec) {
-        firmAccessService.requirePermission(firmId, userId, FirmPermission.FIRM_UPDATE);
-        firmAccessService.requireFirmOperational(firmId);
+        firmAccessService.requireOperationalPermission(firmId, userId, FirmPermission.FIRM_UPDATE);
         FirmEntity firm = requireFirm(firmId);
         firm.setName(sanitizeFirmName(spec.name()));
         FirmEntity saved = firmRepository.save(firm);
@@ -144,19 +148,13 @@ public class FirmService {
     public void deleteFirm(UUID userId, UUID firmId) {
         firmAccessService.requirePermission(firmId, userId, FirmPermission.FIRM_DELETE);
         requireFirm(firmId);
-        List<String> storageKeys = firmDocumentRepository.findAllByFirmId(firmId).stream()
-                .map(FirmDocumentEntity::getStorageKey)
-                .toList();
+        // Bulk-delete file rows first so the restrictive folder FK does not block the
+        // cascading delete of the folder trees.
+        workOrderFileRepository.deleteByFirmId(firmId);
+        workOrderInvoiceRepository.deleteByFirmId(firmId);
         firmRepository.deleteById(firmId);
-        scheduleStorageDeletes(firmId, storageKeys);
-    }
-
-    public void assertUserIsMember(UUID firmId, UUID userId) {
-        firmAccessService.requireMembership(firmId, userId);
-    }
-
-    public void assertUserIsOwner(UUID firmId, UUID userId) {
-        firmAccessService.requireOwner(firmId, userId);
+        String prefix = WorkOrderStorageKeys.firmPrefix(firmId);
+        afterCommitExecutor.execute(() -> deletePrefixQuietly(firmId, prefix));
     }
 
     private FirmEntity requireFirm(UUID firmId) {
@@ -214,30 +212,11 @@ public class FirmService {
         }
     }
 
-    private void scheduleStorageDeletes(UUID firmId, List<String> keys) {
-        if (keys.isEmpty()) {
-            return;
-        }
-        List<String> copy = new ArrayList<>(keys);
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    deleteKeysQuietly(firmId, copy);
-                }
-            });
-        } else {
-            deleteKeysQuietly(firmId, copy);
-        }
-    }
-
-    private void deleteKeysQuietly(UUID firmId, List<String> keys) {
-        for (String key : keys) {
-            try {
-                documentStorage.delete(key);
-            } catch (IOException e) {
-                log.warn("Storage delete failed firmId={} key={}: {}", firmId, key, e.getMessage());
-            }
+    private void deletePrefixQuietly(UUID firmId, String prefix) {
+        try {
+            blobStorage.deleteByPrefix(prefix);
+        } catch (IOException e) {
+            log.warn("Blob prefix delete failed firmId={} prefix={}: {}", firmId, prefix, e.getMessage());
         }
     }
 

@@ -3,6 +3,9 @@
 .idea
 .cursor
 to-do.md
+.venv-markitdown/
+.venv-mlx/
+.mlx-models/
 
 target/
 !.mvn/wrapper/maven-wrapper.jar

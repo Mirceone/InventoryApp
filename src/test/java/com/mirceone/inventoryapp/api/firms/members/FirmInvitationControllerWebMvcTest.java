@@ -96,6 +96,30 @@ class FirmInvitationControllerWebMvcTest {
     }
 
     @Test
+    void listMembersReturnsMemberList() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID firmId = UUID.randomUUID();
+        UUID memberUserId = UUID.randomUUID();
+
+        when(firmMemberService.listMembers(firmId, userId)).thenReturn(List.of(
+                new FirmMemberContracts.FirmMemberSummary(
+                        memberUserId,
+                        "member@example.com",
+                        "Member",
+                        MemberRole.MEMBER,
+                        "Angajat",
+                        Instant.parse("2026-01-01T00:00:00Z")
+                )
+        ));
+
+        mockMvc.perform(get("/firms/{firmId}/members", firmId)
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(j -> j.subject(userId.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].userId").value(memberUserId.toString()))
+                .andExpect(jsonPath("$[0].role").value("MEMBER"));
+    }
+
+    @Test
     void updateMemberRoleReturnsUpdatedMember() throws Exception {
         UUID userId = UUID.randomUUID();
         UUID firmId = UUID.randomUUID();
@@ -127,6 +151,19 @@ class FirmInvitationControllerWebMvcTest {
         UUID memberUserId = UUID.randomUUID();
 
         mockMvc.perform(delete("/firms/{firmId}/members/{memberUserId}", firmId, memberUserId)
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(j -> j.subject(userId.toString()))))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void revokeInvitationReturnsNoContent() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID firmId = UUID.randomUUID();
+        UUID invitationId = UUID.randomUUID();
+
+        doNothing().when(firmInvitationService).revokeInvitation(firmId, userId, invitationId);
+
+        mockMvc.perform(delete("/firms/{firmId}/invitations/{invitationId}", firmId, invitationId)
                         .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(j -> j.subject(userId.toString()))))
                 .andExpect(status().isNoContent());
     }

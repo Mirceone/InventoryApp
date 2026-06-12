@@ -9,6 +9,8 @@ import java.util.UUID;
 
 public interface CategoryRepository extends JpaRepository<CategoryEntity, UUID> {
 
+    long countByFirmId(UUID firmId);
+
     Optional<CategoryEntity> findByFirmIdAndName(UUID firmId, String name);
 
     Optional<CategoryEntity> findByIdAndFirmId(UUID id, UUID firmId);
