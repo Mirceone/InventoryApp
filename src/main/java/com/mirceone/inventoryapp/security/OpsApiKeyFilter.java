@@ -51,7 +51,7 @@ public class OpsApiKeyFilter extends OncePerRequestFilter {
         }
 
         String requestApiKey = request.getHeader(OPS_API_KEY_HEADER);
-        if (!configuredApiKey.equals(requestApiKey)) {
+        if (!constantTimeEquals(configuredApiKey, requestApiKey)) {
             writeError(
                     request,
                     response,
@@ -63,6 +63,16 @@ public class OpsApiKeyFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    /** Length-leaking but value-constant comparison to avoid a timing oracle on the ops key. */
+    private static boolean constantTimeEquals(String expected, String actual) {
+        if (actual == null) {
+            return false;
+        }
+        return java.security.MessageDigest.isEqual(
+                expected.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                actual.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     private void writeError(

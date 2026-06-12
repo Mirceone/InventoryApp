@@ -26,13 +26,17 @@ public class DocumentUploadRateLimitFilter extends OncePerRequestFilter {
             Pattern.compile("^/firms/[0-9a-fA-F\\-]{36}/work-orders/[0-9a-fA-F\\-]{36}/(files|invoices)(/batch)?$");
 
     private final AuthRateLimiter documentUploadRateLimiter;
+    private final boolean trustForwardedFor;
     private final ObjectMapper objectMapper;
 
     public DocumentUploadRateLimitFilter(
             @Qualifier("documentUploadRateLimiter") AuthRateLimiter documentUploadRateLimiter,
+            @org.springframework.beans.factory.annotation.Value("${app.security.rate-limit.trust-forwarded-for:false}")
+            boolean trustForwardedFor,
             ObjectMapper objectMapper
     ) {
         this.documentUploadRateLimiter = documentUploadRateLimiter;
+        this.trustForwardedFor = trustForwardedFor;
         this.objectMapper = objectMapper;
     }
 
@@ -48,7 +52,7 @@ public class DocumentUploadRateLimitFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        String key = request.getRemoteAddr() + "|" + request.getRequestURI();
+        String key = ClientIpResolver.resolve(request, trustForwardedFor) + "|" + request.getRequestURI();
         if (!documentUploadRateLimiter.allow(key)) {
             writeTooManyRequestsResponse(request, response);
             return;

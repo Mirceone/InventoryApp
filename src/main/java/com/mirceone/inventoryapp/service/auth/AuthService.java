@@ -16,6 +16,13 @@ import static org.springframework.http.HttpStatus.*;
 @Service
 public class AuthService {
 
+    /**
+     * A valid BCrypt hash of a random value, used to spend the same hashing time when the email
+     * is unknown or non-local, so login response time does not reveal whether an account exists.
+     */
+    private static final String DUMMY_BCRYPT_HASH =
+            "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenService jwtTokenService;
@@ -60,15 +67,21 @@ public class AuthService {
     public AuthContracts.IssuedTokenPair login(AuthContracts.LoginSpec request) {
         String email = request.email().trim().toLowerCase(Locale.ROOT);
 
-        UserEntity user = userRepository.findByEmailIgnoreCase(email)
-                .orElseThrow(() -> new ResponseStatusException(UNAUTHORIZED, "Invalid email or password"));
+        UserEntity user = userRepository.findByEmailIgnoreCase(email).orElse(null);
 
-        if (user.getProvider() != ProviderType.LOCAL || user.getPasswordHash() == null) {
+        boolean localCredentials = user != null
+                && user.getProvider() == ProviderType.LOCAL
+                && user.getPasswordHash() != null;
+
+        // Always run a comparison (against a dummy hash when needed) so timing does not reveal
+        // whether the email exists or which provider the account uses.
+        String hashToCheck = localCredentials ? user.getPasswordHash() : DUMMY_BCRYPT_HASH;
+        boolean passwordMatches = passwordEncoder.matches(request.password(), hashToCheck);
+
+        if (user != null && !localCredentials) {
             throw new ResponseStatusException(BAD_REQUEST, "Use social login for this account provider");
         }
-
-        boolean ok = passwordEncoder.matches(request.password(), user.getPasswordHash());
-        if (!ok) {
+        if (!localCredentials || !passwordMatches) {
             throw new ResponseStatusException(UNAUTHORIZED, "Invalid email or password");
         }
 
