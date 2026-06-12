@@ -28,14 +28,6 @@ public class InvoiceOcrCommandResolver {
     void resolveAtStartup() {
         pythonPrefix = resolvePython(props.getInvoices().getOcrPythonCommand());
         scriptPath = resolveScript(props.getInvoices().getOcrScriptPath());
-        // #region agent log
-        InvoiceDebugLog.write("F", "InvoiceOcrCommandResolver.resolveAtStartup",
-                "resolved OCR command",
-                InvoiceDebugLog.data(
-                        "python", String.join(" ", pythonPrefix),
-                        "script", scriptPath.toAbsolutePath().toString(),
-                        "available", isAvailable()));
-        // #endregion
     }
 
     public List<String> pythonPrefix() {

@@ -32,23 +32,10 @@ public class InvoiceExtractorStartupValidator {
         String resolved = String.join(" ", commandResolver.commandPrefix());
         boolean ok = MarkItDownCommandResolver.probeHelp(commandResolver.commandPrefix());
 
-        // #region agent log
-        InvoiceDebugLog.write("A", "InvoiceExtractorStartupValidator.validateMarkItDownAvailable",
-                "markitdown startup probe",
-                InvoiceDebugLog.data("resolved", resolved, "ok", ok));
-        // #endregion
 
         boolean ocrOk = InvoiceOcrCommandResolver.probeOcrDeps(
                 ocrCommandResolver.pythonPrefix(), ocrCommandResolver.scriptPath());
 
-        // #region agent log
-        InvoiceDebugLog.write("F", "InvoiceExtractorStartupValidator.validateMarkItDownAvailable",
-                "OCR fallback startup probe",
-                InvoiceDebugLog.data(
-                        "python", String.join(" ", ocrCommandResolver.pythonPrefix()),
-                        "script", ocrCommandResolver.scriptPath().toAbsolutePath().toString(),
-                        "ok", ocrOk));
-        // #endregion
 
         if (!ok) {
             log.error("""

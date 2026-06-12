@@ -10,6 +10,8 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 
 @Component
@@ -37,19 +39,16 @@ public class MarkItDownCliExtractor implements InvoiceMarkdownExtractor {
         try {
             process = builder.start();
         } catch (IOException e) {
-            // #region agent log
-            InvoiceDebugLog.write("A", "MarkItDownCliExtractor.extract",
-                    "failed to start markitdown process",
-                    InvoiceDebugLog.data(
-                            "command", String.join(" ", command),
-                            "error", e.getMessage()));
-            // #endregion
             throw new IOException(
                     "Failed to start MarkItDown command: " + String.join(" ", commandParts)
                             + ". Install with: pip install 'markitdown[all]'"
                             + " or create .venv-markitdown in the project root.",
                     e);
         }
+
+        // Drain the merged stdout+stderr stream concurrently so a large output cannot fill the OS
+        // pipe buffer and deadlock the child process while we are blocked in waitFor.
+        CompletableFuture<byte[]> outputFuture = readOutputAsync(process);
 
         Duration timeout = props.getInvoices().getMarkitdownTimeout();
         boolean finished;
@@ -58,26 +57,19 @@ public class MarkItDownCliExtractor implements InvoiceMarkdownExtractor {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             process.destroyForcibly();
+            outputFuture.cancel(true);
             throw new IOException("MarkItDown interrupted", e);
         }
 
-        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).strip();
-
         if (!finished) {
             process.destroyForcibly();
+            outputFuture.cancel(true);
             throw new IOException("MarkItDown timed out after " + timeout);
         }
 
+        String output = readOutput(outputFuture).strip();
+
         int exitCode = process.exitValue();
-        // #region agent log
-        InvoiceDebugLog.write("A", "MarkItDownCliExtractor.extract",
-                "markitdown process finished",
-                InvoiceDebugLog.data(
-                        "command", String.join(" ", command),
-                        "exitCode", exitCode,
-                        "outputLength", output.length(),
-                        "finished", finished));
-        // #endregion
         if (exitCode != 0) {
             String message = output.isBlank() ? "exit code " + exitCode : output;
             throw new IOException("MarkItDown failed: " + truncate(message, 500));
@@ -88,6 +80,24 @@ public class MarkItDownCliExtractor implements InvoiceMarkdownExtractor {
         }
 
         return output;
+    }
+
+    private static CompletableFuture<byte[]> readOutputAsync(Process process) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return process.getInputStream().readAllBytes();
+            } catch (IOException e) {
+                throw new CompletionException(e);
+            }
+        });
+    }
+
+    private static String readOutput(CompletableFuture<byte[]> outputFuture) throws IOException {
+        try {
+            return new String(outputFuture.join(), StandardCharsets.UTF_8);
+        } catch (CompletionException e) {
+            throw new IOException("Failed to read MarkItDown output", e.getCause());
+        }
     }
 
     private static String truncate(String value, int max) {

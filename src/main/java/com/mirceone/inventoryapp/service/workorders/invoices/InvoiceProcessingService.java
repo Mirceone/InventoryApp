@@ -40,19 +40,9 @@ public class InvoiceProcessingService {
 
     @Async
     public void processAsync(UUID invoiceId) {
-        // #region agent log
-        InvoiceDebugLog.write("D", "InvoiceProcessingService.processAsync",
-                "async processing triggered",
-                InvoiceDebugLog.data("invoiceId", invoiceId, "thread", Thread.currentThread().getName()));
-        // #endregion
         try {
             processInvoice(invoiceId);
         } catch (Exception e) {
-            // #region agent log
-            InvoiceDebugLog.write("D", "InvoiceProcessingService.processAsync",
-                    "async processing exception",
-                    InvoiceDebugLog.data("invoiceId", invoiceId, "error", e.getMessage()));
-            // #endregion
             log.warn("Async invoice processing failed id={}: {}", invoiceId, e.getMessage());
         }
     }
@@ -60,11 +50,6 @@ public class InvoiceProcessingService {
     @Transactional
     public int processPendingBatch(int batchSize) {
         List<WorkOrderInvoiceEntity> batch = invoiceRepository.lockNextPendingBatch(batchSize);
-        // #region agent log
-        InvoiceDebugLog.write("D", "InvoiceProcessingService.processPendingBatch",
-                "worker polled pending batch",
-                InvoiceDebugLog.data("batchSize", batchSize, "lockedCount", batch.size()));
-        // #endregion
         int processed = 0;
         for (WorkOrderInvoiceEntity invoice : batch) {
             try {
@@ -80,11 +65,6 @@ public class InvoiceProcessingService {
     @Transactional
     public void processInvoice(UUID invoiceId) {
         WorkOrderInvoiceEntity invoice = invoiceRepository.lockPendingById(invoiceId).orElse(null);
-        // #region agent log
-        InvoiceDebugLog.write("C", "InvoiceProcessingService.processInvoice",
-                "lock pending by id",
-                InvoiceDebugLog.data("invoiceId", invoiceId, "locked", invoice != null));
-        // #endregion
         if (invoice == null) {
             return;
         }
@@ -93,35 +73,11 @@ public class InvoiceProcessingService {
 
     private void processLockedInvoice(WorkOrderInvoiceEntity invoice) {
         Path tempFile = null;
-        // #region agent log
-        InvoiceDebugLog.write("B", "InvoiceProcessingService.processLockedInvoice",
-                "processing started",
-                InvoiceDebugLog.data(
-                        "invoiceId", invoice.getId(),
-                        "extractor", markdownExtractor.getClass().getSimpleName(),
-                        "mimeType", invoice.getMimeType(),
-                        "storageKey", invoice.getStorageKey()));
-        // #endregion
         try {
             tempFile = materializeBlob(invoice);
             String markdown = markdownExtractor.extract(tempFile, invoice.getMimeType());
             markReady(invoice, markdown);
-            // #region agent log
-            InvoiceDebugLog.write("A", "InvoiceProcessingService.processLockedInvoice",
-                    "processing READY",
-                    InvoiceDebugLog.data(
-                            "invoiceId", invoice.getId(),
-                            "markdownLength", markdown != null ? markdown.length() : 0));
-            // #endregion
         } catch (Exception e) {
-            // #region agent log
-            InvoiceDebugLog.write("A", "InvoiceProcessingService.processLockedInvoice",
-                    "processing FAILED",
-                    InvoiceDebugLog.data(
-                            "invoiceId", invoice.getId(),
-                            "errorType", e.getClass().getSimpleName(),
-                            "error", e.getMessage()));
-            // #endregion
             markFailed(invoice, e);
         } finally {
             if (tempFile != null) {

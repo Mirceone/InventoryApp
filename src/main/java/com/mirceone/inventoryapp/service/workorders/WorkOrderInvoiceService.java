@@ -10,7 +10,6 @@ import com.mirceone.inventoryapp.service.firms.access.FirmAccessService;
 import com.mirceone.inventoryapp.service.firms.access.FirmPermission;
 import com.mirceone.inventoryapp.service.storage.BlobStorage;
 import com.mirceone.inventoryapp.service.support.AfterCommitExecutor;
-import com.mirceone.inventoryapp.service.workorders.invoices.InvoiceDebugLog;
 import com.mirceone.inventoryapp.service.workorders.invoices.InvoiceProcessingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -252,16 +251,6 @@ public class WorkOrderInvoiceService {
                     storageKey
             ));
             UUID savedId = saved.getId();
-            // #region agent log
-            InvoiceDebugLog.write(
-                    "E", "WorkOrderInvoiceService.persistUpload",
-                    "invoice saved, scheduling async processing",
-                    InvoiceDebugLog.data(
-                            "invoiceId", savedId,
-                            "displayName", sanitized,
-                            "mimeType", storedMime,
-                            "status", saved.getProcessingStatus().name()));
-            // #endregion
             afterCommitExecutor.execute(() -> processingService.processAsync(savedId));
             return saved;
         } catch (RuntimeException e) {

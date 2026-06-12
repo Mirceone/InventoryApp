@@ -32,13 +32,6 @@ public class MarkItDownCommandResolver {
     @PostConstruct
     void resolveAtStartup() {
         resolvedPrefix = resolve(props.getInvoices().getMarkitdownCommand());
-        // #region agent log
-        InvoiceDebugLog.write("A", "MarkItDownCommandResolver.resolveAtStartup",
-                "resolved markitdown command",
-                InvoiceDebugLog.data(
-                        "configured", props.getInvoices().getMarkitdownCommand(),
-                        "resolved", String.join(" ", resolvedPrefix)));
-        // #endregion
     }
 
     public List<String> commandPrefix() {

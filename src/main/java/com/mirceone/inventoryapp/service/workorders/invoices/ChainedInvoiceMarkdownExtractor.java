@@ -38,14 +38,6 @@ public class ChainedInvoiceMarkdownExtractor implements InvoiceMarkdownExtractor
             if (!shouldUseOcrFallback(mimeType, markItDownError)) {
                 throw markItDownError;
             }
-            // #region agent log
-            InvoiceDebugLog.write("F", "ChainedInvoiceMarkdownExtractor.extract",
-                    "MarkItDown empty, falling back to OCR",
-                    InvoiceDebugLog.data(
-                            "mimeType", mimeType,
-                            "file", sourceFile.getFileName().toString(),
-                            "markItDownError", markItDownError.getMessage()));
-            // #endregion
             return ocrExtractor.extract(sourceFile, mimeType);
         }
     }
