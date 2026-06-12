@@ -1,6 +1,6 @@
 # Ghid backend — Work Orders (foldere definite de utilizator)
 
-Modulul Work Orders oferă fiecărui work order un **arbore de foldere definit de utilizator**, cu **reguli de extensii per folder**. Fișierele urcate sunt clasificate **sincron** la upload: extensia decide folderul; dacă nicio regulă nu se potrivește, fișierul ajunge în folderul **catch-all**.
+Modulul Work Orders oferă fiecărui work order un **arbore de foldere definit de utilizator**, cu **reguli de extensii per folder**. La upload, clasificarea pornește cu reguli de extensie și euristici pe nume/MIME; fișierele nerezolvate pot intra în **clasificare async MLX** (când `APP_FEATURES_WORK_ORDER_AI=true`).
 
 ## Principiu de arhitectură
 
@@ -17,9 +17,9 @@ Modulul Work Orders oferă fiecărui work order un **arbore de foldere definit d
 | `firm_work_orders` | Metadata work order (nume, client, locație, status etc.). |
 | `work_order_folders` | Arborele virtual: `parent_id` self-FK, `name`, `catch_all`, `sort_order`. Nume unic (case-insensitive) între frați; exact un `catch_all=true` per work order (index unic parțial). |
 | `work_order_folder_rules` | `extension` (lowercase, fără punct) → `folder_id`. Unic pe `(work_order_id, extension)` — clasificare deterministă. |
-| `work_order_files` | Metadata fișier: `folder_id` FK (fără cascade — un folder cu fișiere nu poate fi șters), `display_name` unic (case-insensitive) per folder, `storage_key` unic. |
+| `work_order_files` | Metadata fișier: `folder_id` FK, `display_name`, `storage_key`, plus `classification_status` (`PENDING` / `CLASSIFIED` / `FAILED`), `classification_source` (`RULE` / `AI` / `MANUAL`), `classification_error`. |
 
-Nu există `processing_status`, `folder_path` sau worker asincron — clasificarea e sincronă și deterministă.
+Migrare V9 adaugă coloanele de clasificare și index parțial pe `PENDING`.
 
 ## Componente
 
@@ -28,18 +28,28 @@ Nu există `processing_status`, `folder_path` sau worker asincron — clasificar
 | `service/storage/BlobStorage` + `LocalBlobStorage` | `store`, `open`, `delete`, `deleteByPrefix` (ștergere work order/firmă într-un singur apel). |
 | `service/workorders/WorkOrderService` | CRUD + status; la creare populează folderele din `DefaultFolderTemplate`; la ștergere șterge rândurile și apoi blob-urile pe prefix (after-commit). |
 | `service/workorders/WorkOrderFolderService` | Arbore: creare (max. 3 niveluri), redenumire, mutare (validare cicluri/adâncime), ștergere (gol sau `moveFilesTo=catchAll`), înlocuire reguli. |
-| `service/workorders/FileClassifier` | `resolveFolderId(workOrderId, extension)` — regulă sau catch-all. |
-| `service/workorders/WorkOrderFileService` | Upload (single/batch), listare paginată, descărcare, redenumire, mutare manuală, ștergere; dedupe nume (`plan (1).pdf`). |
+| `service/workorders/FileClassifier` | Reguli de extensie (`resolveByExtension`). |
+| `service/workorders/classification/*` | Heuristici, `MlxFolderClassifier`, `WorkOrderFileClassifier`, worker async. |
+| `service/workorders/WorkOrderFileService` | Upload (single/batch), listare, descărcare, redenumire, mutare manuală (`MANUAL`), ștergere; trigger after-commit pentru `PENDING`. |
 | `service/workorders/DefaultFolderTemplate` | Structura implicită (`Documents` + `Misc` catch-all). Numele nu sunt referențiate nicăieri în cod — flagul `catch_all` contează, nu numele. |
 | `api/workorders/*` | `WorkOrderController`, `FolderController`, `FileController` + DTO-uri și mappers. |
 
 ## Fluxul de upload
 
 1. Validare nume/MIME/dimensiune.
-2. `FileClassifier.resolveFolderId(workOrderId, extensie)` — regulă sau catch-all.
+2. `WorkOrderFileClassifier.classifyOnUpload` — extensie → euristică → catch-all (+ `PENDING` dacă AI activ).
 3. Blob scris sub cheie opacă (`firmId/workOrderId/fileId.ext`) + SHA-256.
-4. INSERT rând fișier cu dedupe pe `display_name` (retry pe conflict de unicitate).
-5. La eșec DB → blob-ul e șters (compensare). Orfanii rămași după crash sunt inofensivi.
+4. INSERT rând fișier cu `classification_*`; dedupe pe `display_name`.
+5. Dacă `PENDING` → `FileClassificationService.processAsync` după commit; worker poll la `app.files.classification-poll-interval`.
+6. La eșec DB → blob șters (compensare).
+
+### Feature flag
+
+| Env | Rol |
+|-----|-----|
+| `APP_FEATURES_WORK_ORDER_AI` | `false` = fără `PENDING`, doar catch-all pentru nerezolvate |
+| `APP_FILES_CLASSIFICATION_POLL_INTERVAL` | Interval worker (implicit `2s`) |
+| `APP_FILES_CLASSIFICATION_BATCH_SIZE` | Batch worker (implicit `10`) |
 
 ## Invarianti și erori
 

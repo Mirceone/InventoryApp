@@ -11,10 +11,13 @@ import com.mirceone.inventoryapp.service.workorders.FileDownload;
 import com.mirceone.inventoryapp.service.workorders.FileSummary;
 import com.mirceone.inventoryapp.service.workorders.FolderTreeNode;
 import com.mirceone.inventoryapp.service.workorders.WorkOrderContracts;
+import com.mirceone.inventoryapp.model.FileClassificationSource;
+import com.mirceone.inventoryapp.model.FileClassificationStatus;
 import com.mirceone.inventoryapp.service.workorders.WorkOrderFileService;
 import com.mirceone.inventoryapp.service.workorders.WorkOrderFolderService;
 import com.mirceone.inventoryapp.service.workorders.WorkOrderService;
 import com.mirceone.inventoryapp.service.workorders.WorkOrderSummary;
+import com.mirceone.inventoryapp.service.workorders.classification.FileClassificationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -54,6 +57,8 @@ class WorkOrderFileIntegrationTest extends IntegrationTestBase {
     private WorkOrderFileService fileService;
     @Autowired
     private JdbcTemplate jdbcTemplate;
+    @Autowired
+    private FileClassificationService fileClassificationService;
 
     @org.junit.jupiter.api.io.TempDir
     static Path storageRoot;
@@ -61,6 +66,8 @@ class WorkOrderFileIntegrationTest extends IntegrationTestBase {
     @DynamicPropertySource
     static void storageProps(DynamicPropertyRegistry registry) {
         registry.add("app.storage.root", () -> storageRoot.toAbsolutePath().toString());
+        registry.add("app.features.work-order-ai-enabled", () -> "true");
+        registry.add("app.files.classification-poll-interval", () -> "365d");
     }
 
     @Test
@@ -89,6 +96,10 @@ class WorkOrderFileIntegrationTest extends IntegrationTestBase {
         List<FolderTreeNode> tree = folderService.getFolderTree(userId, firm.id(), workOrder.id());
         assertEquals(2, tree.size());
         FolderTreeNode catchAll = tree.stream().filter(FolderTreeNode::catchAll).findFirst().orElseThrow();
+        FolderTreeNode documents = tree.stream()
+                .filter(n -> "Documents".equals(n.name()))
+                .findFirst()
+                .orElseThrow();
 
         // User-defined folder with a png rule
         FolderTreeNode poze = folderService.createFolder(userId, firm.id(), workOrder.id(),
@@ -109,9 +120,9 @@ class WorkOrderFileIntegrationTest extends IntegrationTestBase {
         assertEquals(3, batch.accepted().size());
         assertEquals(0, batch.errors().size());
 
-        // png files classified by rule; pdf has no rule -> catch-all
+        // png files classified by extension rule; pdf by filename/MIME heuristic -> Documents
         assertEquals(2, batch.accepted().stream().filter(i -> i.folderId().equals(poze.id())).count());
-        assertEquals(1, batch.accepted().stream().filter(i -> i.folderId().equals(catchAll.id())).count());
+        assertEquals(1, batch.accepted().stream().filter(i -> i.folderId().equals(documents.id())).count());
 
         // Duplicate display name got a suffix
         Page<FileSummary> pozeFiles = fileService.listFiles(
@@ -155,7 +166,7 @@ class WorkOrderFileIntegrationTest extends IntegrationTestBase {
         folderService.deleteFolder(userId, firm.id(), workOrder.id(), poze.id(), true);
         Page<FileSummary> catchAllFiles = fileService.listFiles(
                 userId, firm.id(), workOrder.id(), catchAll.id(), PageRequest.of(0, 10));
-        assertEquals(3, catchAllFiles.getTotalElements());
+        assertEquals(2, catchAllFiles.getTotalElements());
 
         // Deleting the work order removes everything
         workOrderService.deleteWorkOrder(userId, firm.id(), workOrder.id());
@@ -171,5 +182,45 @@ class WorkOrderFileIntegrationTest extends IntegrationTestBase {
         );
         assertEquals(0, remainingFiles);
         assertEquals(0, remainingFolders);
+    }
+
+    @Test
+    void asyncAiClassificationCompletesUnknownFile() throws Exception {
+        authService.signup(new AuthContracts.SignupSpec("wo-ai-it@example.com", "password123", "WO AI IT"));
+        UserEntity user = userRepository.findByEmailIgnoreCase("wo-ai-it@example.com").orElseThrow();
+        UUID userId = user.getId();
+
+        FirmContracts.FirmSummary firm =
+                firmService.createFirm(userId, new FirmContracts.CreateFirmSpec("Firm AI Classify"));
+
+        WorkOrderSummary workOrder = workOrderService.createWorkOrder(
+                userId,
+                firm.id(),
+                new WorkOrderContracts.CreateWorkOrderSpec(
+                        "Proiect",
+                        "Client",
+                        "Bucharest",
+                        null,
+                        LocalDate.now(ZoneOffset.UTC).plusDays(7)
+                )
+        );
+
+        MockMultipartFile unknown = new MockMultipartFile(
+                "file", "data.xyz", "application/octet-stream", "bytes".getBytes(StandardCharsets.UTF_8)
+        );
+        FileSummary uploaded = fileService.upload(userId, firm.id(), workOrder.id(), unknown);
+        assertEquals(FileClassificationStatus.PENDING, uploaded.classificationStatus());
+        assertNull(uploaded.classificationSource());
+
+        fileClassificationService.processPendingBatch(10);
+
+        FileSummary classified = fileService.listFiles(
+                userId, firm.id(), workOrder.id(), null, PageRequest.of(0, 10))
+                .getContent().stream()
+                .filter(f -> f.id().equals(uploaded.id()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(FileClassificationStatus.CLASSIFIED, classified.classificationStatus());
+        assertEquals(FileClassificationSource.AI, classified.classificationSource());
     }
 }

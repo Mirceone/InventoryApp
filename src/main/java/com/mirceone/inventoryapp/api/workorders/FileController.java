@@ -29,7 +29,7 @@ import java.util.UUID;
 @Validated
 @RestController
 @RequestMapping("/firms/{firmId}/work-orders/{workOrderId}/files")
-@Tag(name = "Work order files", description = "Files classified into the work order folder tree by extension rules")
+@Tag(name = "Work order files", description = "Files classified by extension rules, filename heuristics, and optional async AI")
 @SecurityRequirement(name = "bearerAuth")
 public class FileController {
 
@@ -55,7 +55,7 @@ public class FileController {
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Upload a single file (classified synchronously into a folder)")
+    @Operation(summary = "Upload a single file (extension/heuristic sync; AI async when enabled)")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Created with folder assignment"),
             @ApiResponse(responseCode = "413", description = "File too large"),

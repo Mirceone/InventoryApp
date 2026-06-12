@@ -173,7 +173,10 @@ class FileControllerWebMvcTest {
                 4,
                 Instant.parse("2026-01-01T12:00:00Z"),
                 userId,
-                "u@example.com"
+                "u@example.com",
+                com.mirceone.inventoryapp.model.FileClassificationStatus.CLASSIFIED,
+                com.mirceone.inventoryapp.model.FileClassificationSource.RULE,
+                null
         );
     }
 }

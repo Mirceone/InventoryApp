@@ -1,6 +1,5 @@
 package com.mirceone.inventoryapp.service.ai;
 
-import com.mirceone.inventoryapp.config.AppIntegrationProperties;
 import com.openai.client.OpenAIClient;
 import com.openai.models.chat.completions.ChatCompletion;
 import com.openai.models.chat.completions.ChatCompletionAssistantMessageParam;
@@ -23,17 +22,17 @@ import java.util.List;
 public class OpenAiSdkAiService implements AiService {
 
     private final OpenAIClient client;
-    private final AppIntegrationProperties props;
+    private final AiModelIdResolver modelIdResolver;
 
-    public OpenAiSdkAiService(OpenAIClient client, AppIntegrationProperties props) {
+    public OpenAiSdkAiService(OpenAIClient client, AiModelIdResolver modelIdResolver) {
         this.client = client;
-        this.props = props;
+        this.modelIdResolver = modelIdResolver;
     }
 
     @Override
     public String chat(List<AiChatMessage> messages) {
         ChatCompletionCreateParams params = ChatCompletionCreateParams.builder()
-                .model(props.getAi().getModel())
+                .model(modelIdResolver.resolvedModelId())
                 .messages(toSdkMessages(messages))
                 .build();
         return extractContent(client.chat().completions().create(params));
@@ -42,7 +41,7 @@ public class OpenAiSdkAiService implements AiService {
     @Override
     public String chatJson(String userPrompt) {
         ChatCompletionCreateParams params = ChatCompletionCreateParams.builder()
-                .model(props.getAi().getModel())
+                .model(modelIdResolver.resolvedModelId())
                 .addMessage(ChatCompletionUserMessageParam.builder().content(userPrompt).build())
                 .responseFormat(ResponseFormat.ofJsonObject(ResponseFormatJsonObject.builder().build()))
                 .build();

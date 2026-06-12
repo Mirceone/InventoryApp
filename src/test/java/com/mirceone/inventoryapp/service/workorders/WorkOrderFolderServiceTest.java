@@ -197,7 +197,9 @@ class WorkOrderFolderServiceTest {
     void deleteFolderWithMoveReassignsFilesToCatchAll() {
         WorkOrderFileEntity file = new WorkOrderFileEntity(
                 UUID.randomUUID(), firmId, workOrderId, documents.getId(), userId,
-                "plan.pdf", "pdf", "application/pdf", 10, null, "key-1.pdf");
+                "plan.pdf", "pdf", "application/pdf", 10, null, "key-1.pdf",
+                com.mirceone.inventoryapp.model.FileClassificationStatus.CLASSIFIED,
+                com.mirceone.inventoryapp.model.FileClassificationSource.RULE);
         when(fileRepository.existsByFolderIdIn(List.of(documents.getId()))).thenReturn(true);
         when(fileRepository.findAllByFolderIdIn(List.of(documents.getId()))).thenReturn(List.of(file));
         when(fileRepository.existsByFolderIdAndDisplayNameIgnoreCase(catchAll.getId(), "plan.pdf")).thenReturn(false);

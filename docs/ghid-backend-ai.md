@@ -5,7 +5,7 @@ Infrastructură AI pentru apeluri LLM din servicii de domeniu. **Nu există endp
 ## Arhitectură
 
 ```
-Serviciu domeniu (viitor)
+WorkOrderFileClassifier / MlxFolderClassifier
         ↓
     AiService
         ↓
@@ -26,7 +26,7 @@ app:
     provider: mlx
     base-url: http://127.0.0.1:8000/v1
     api-key: mlx-local
-    model: mlx-community/gemma-4-12B-it-qat-4bit
+    model: mlx-community/gemma-4-12B-it-qat-4bit   # opțional: cale absolută locală
     huggingface-repo: mlx-community/gemma-4-12B-it-qat-4bit
     auto-download-model: true
     auto-start-server: true
@@ -44,7 +44,10 @@ app:
 | `APP_AI_PROVIDER` | `mlx` | `mlx` = SDK real; `stub` = răspunsuri fixe (teste/CI) |
 | `APP_AI_BASE_URL` | `http://127.0.0.1:8000/v1` | URL bază OpenAI-compatible |
 | `APP_AI_API_KEY` | `mlx-local` | Cheie Bearer pentru MLX |
-| `APP_AI_MODEL` | `mlx-community/gemma-4-12B-it-qat-4bit` | Model trimis la `/v1/chat/completions` |
+| `APP_AI_MODEL` | repo HF sau cale absolută | Override opțional; implicit se folosește calea locală din cache |
+| `APP_FEATURES_WORK_ORDER_AI` | `true` | Clasificare async MLX pentru fișiere fără regulă/heuristică |
+| `APP_FILES_CLASSIFICATION_POLL_INTERVAL` | `2s` | Interval worker clasificare |
+| `APP_FILES_CLASSIFICATION_BATCH_SIZE` | `10` | Batch worker clasificare |
 | `APP_AI_HUGGINGFACE_REPO` | la fel ca model | Repo Hugging Face pentru download |
 | `APP_AI_MODEL_CACHE_DIR` | `.mlx-models/<repo-slug>` | Director local pentru weights |
 | `APP_AI_AUTO_DOWNLOAD_MODEL` | `true` | Descarcă automat dacă lipsesc weights |
@@ -74,7 +77,9 @@ La `ApplicationReadyEvent`, backend-ul:
 3. Dacă serverul MLX nu răspunde și `auto-start-server=true` → pornește `mlx_vlm.server` cu modelul local
 4. Probe `GET /v1/models`
 
-Log așteptat: `AI MLX ready (baseUrl=..., model=..., weights=...)`
+Log așteptat: `AI MLX ready (baseUrl=..., apiModel=<cale-local>, weights=...)`
+
+**Important:** câmpul `model` din apelurile `/v1/chat/completions` trebuie să fie **aceeași cale locală** folosită la pornirea `mlx_vlm.server` (ex. `.mlx-models/mlx-community-gemma-4-12B-it-qat-4bit`). Dacă trimiți repo-ul Hugging Face, serverul poate reîncărca weights la fiecare request. Backend-ul rezolvă automat calea din cache după download.
 
 ### 3. Verificare manuală
 
@@ -115,25 +120,20 @@ Implementări:
 - `OpenAiSdkAiService` — activ când `app.ai.provider=mlx` (implicit)
 - `StubAiService` — activ când `app.ai.provider=stub`
 
-## Legare într-un feature viitor
+## Clasificare fișiere work-order (MLX)
 
-```java
-@Service
-class ExampleService {
-    private final AiService ai;
+Flux la upload (`WorkOrderFileClassifier`):
 
-    ExampleService(AiService ai) {
-        this.ai = ai;
-    }
+1. Regulă de extensie → `CLASSIFIED` / `RULE` (sincron)
+2. Heuristică nume/MIME (dacă există folder potrivit în arbore) → `CLASSIFIED` / `RULE`
+3. Dacă `app.features.work-order-ai-enabled=true` → plasare în catch-all + `PENDING`; worker async (`FileClassificationWorker`) apelează `MlxFolderClassifier` → `AiService.chatJson()`
+4. Dacă AI dezactivat → catch-all + `CLASSIFIED` / `RULE`
 
-    void run() {
-        String json = ai.chatJson("...");
-        // parse & persist
-    }
-}
-```
+Răspuns API fișier: `classificationStatus`, `classificationSource`, `classificationError`.
 
-Clasificarea fișierelor work-order folosește în prezent **doar reguli de extensie** (`FileClassifier`). Facturile folosesc MarkItDown + OCR, nu LLM.
+Ops: când `app.features.ops-enabled=true`, prompt/răspuns (excerpt) în `ops_events` cu model id rezolvat.
+
+Facturile folosesc MarkItDown + OCR, nu LLM.
 
 ## Mapare env vechi Ollama (referință)
 

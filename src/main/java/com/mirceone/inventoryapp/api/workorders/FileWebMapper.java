@@ -24,7 +24,10 @@ public final class FileWebMapper {
                 s.sizeBytes(),
                 s.createdAt(),
                 s.uploadedByUserId(),
-                s.uploadedByEmail()
+                s.uploadedByEmail(),
+                s.classificationStatus(),
+                s.classificationSource(),
+                s.classificationError()
         );
     }
 

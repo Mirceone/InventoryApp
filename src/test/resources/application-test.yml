@@ -23,8 +23,12 @@ spring:
 app:
   db:
     create-if-missing: false
+  features:
+    work-order-ai-enabled: true
   ai:
     provider: stub
+  files:
+    classification-poll-interval: 365d
   invoices:
     extractor: stub
     processing-poll-interval: 365d

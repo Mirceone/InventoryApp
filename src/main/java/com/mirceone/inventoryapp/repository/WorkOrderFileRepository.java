@@ -49,4 +49,20 @@ public interface WorkOrderFileRepository extends JpaRepository<WorkOrderFileEnti
     @Modifying
     @Query("DELETE FROM WorkOrderFileEntity f WHERE f.firmId = :firmId")
     void deleteByFirmId(@Param("firmId") UUID firmId);
+
+    @Query(value = """
+            SELECT * FROM work_order_files
+            WHERE classification_status = 'PENDING'
+            ORDER BY created_at ASC
+            LIMIT :limit
+            FOR UPDATE SKIP LOCKED
+            """, nativeQuery = true)
+    List<WorkOrderFileEntity> lockNextPendingBatch(@Param("limit") int limit);
+
+    @Query(value = """
+            SELECT * FROM work_order_files
+            WHERE id = :id AND classification_status = 'PENDING'
+            FOR UPDATE SKIP LOCKED
+            """, nativeQuery = true)
+    Optional<WorkOrderFileEntity> lockPendingById(@Param("id") UUID id);
 }

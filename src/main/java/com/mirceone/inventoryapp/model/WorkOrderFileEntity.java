@@ -49,6 +49,17 @@ public class WorkOrderFileEntity {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "classification_status", nullable = false, length = 32)
+    private FileClassificationStatus classificationStatus = FileClassificationStatus.CLASSIFIED;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "classification_source", length = 16)
+    private FileClassificationSource classificationSource;
+
+    @Column(name = "classification_error", columnDefinition = "text")
+    private String classificationError;
+
     protected WorkOrderFileEntity() {
     }
 
@@ -63,7 +74,9 @@ public class WorkOrderFileEntity {
             String mimeType,
             long sizeBytes,
             String checksumSha256,
-            String storageKey
+            String storageKey,
+            FileClassificationStatus classificationStatus,
+            FileClassificationSource classificationSource
     ) {
         this.id = id;
         this.firmId = firmId;
@@ -76,6 +89,10 @@ public class WorkOrderFileEntity {
         this.sizeBytes = sizeBytes;
         this.checksumSha256 = checksumSha256;
         this.storageKey = storageKey;
+        this.classificationStatus = classificationStatus != null
+                ? classificationStatus
+                : FileClassificationStatus.CLASSIFIED;
+        this.classificationSource = classificationSource;
     }
 
     @PrePersist
@@ -139,5 +156,29 @@ public class WorkOrderFileEntity {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public FileClassificationStatus getClassificationStatus() {
+        return classificationStatus;
+    }
+
+    public void setClassificationStatus(FileClassificationStatus classificationStatus) {
+        this.classificationStatus = classificationStatus;
+    }
+
+    public FileClassificationSource getClassificationSource() {
+        return classificationSource;
+    }
+
+    public void setClassificationSource(FileClassificationSource classificationSource) {
+        this.classificationSource = classificationSource;
+    }
+
+    public String getClassificationError() {
+        return classificationError;
+    }
+
+    public void setClassificationError(String classificationError) {
+        this.classificationError = classificationError;
     }
 }

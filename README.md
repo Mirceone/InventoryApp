@@ -54,7 +54,7 @@ Structura de foldere trăiește **doar în baza de date**; pe disc fișierele su
 
 ### Fișiere în work order
 
-- Upload (`POST .../files` cu `file`), **batch** (`POST .../files/batch` cu `files[]`) — clasificare **sincronă**: extensia decide folderul pe baza regulilor; fără regulă → catch-all. Răspunsul include `folderId` + `folderPath`.
+- Upload (`POST .../files` cu `file`), **batch** (`POST .../files/batch` cu `files[]`) — clasificare: reguli extensie + euristici nume/MIME (sincron); fișiere nerezolvate → catch-all + clasificare **async MLX** când `APP_FEATURES_WORK_ORDER_AI=true`. Răspunsul include `folderId`, `folderPath`, `classificationStatus`, `classificationSource`.
 - Nume duplicate în același folder primesc sufix automat (`plan (1).pdf`).
 - Listare paginată (`GET .../files?folderId=`), descărcare (`GET .../files/{fileId}/content`), redenumire/mutare manuală (`PATCH .../files/{fileId}` cu `{ displayName?, folderId? }`), ștergere.
 - **`DELETE /work-orders/{workOrderId}`** — șterge work order-ul, folderele și fișierele (cascade + cleanup disc pe prefix).
@@ -62,6 +62,8 @@ Structura de foldere trăiește **doar în baza de date**; pe disc fișierele su
 | Variabilă / proprietate | Rol |
 |-------------------------|-----|
 | `APP_FEATURES_WORK_ORDER` | `true` / `false` — dezactivează API-ul work order-urilor (403). |
+| `APP_FEATURES_WORK_ORDER_AI` | `true` / `false` — clasificare async MLX pentru fișiere fără regulă/heuristică. |
+| `APP_FILES_CLASSIFICATION_POLL_INTERVAL` | Interval worker clasificare (implicit `2s`). |
 | `APP_STORAGE_ROOT` | Director rădăcină pentru fișiere (implicit `~/.inventoryapp/uploads`). |
 | `APP_STORAGE_MAX_FILE_SIZE_BYTES` | Limită mărime per fișier (implicit 1 GiB). |
 | `APP_STORAGE_MAX_FILE_SIZE` / `APP_STORAGE_MAX_REQUEST_SIZE` | Limite multipart Spring (implicit 1 GiB / 3 GiB per request). |
@@ -95,7 +97,7 @@ Cerință locală: `pip install 'markitdown[all]'` și `markitdown` în PATH. De
 
 ### AI (MLX)
 
-Infrastructură internă pentru apeluri LLM — **fără endpoint de chat** către frontend. Serviciile de domeniu vor injecta `AiService` când un feature are nevoie de AI.
+Infrastructură internă pentru apeluri LLM — **fără endpoint de chat** către frontend. Folosită pentru clasificarea async a fișierelor work-order (`MlxFolderClassifier` → `AiService`).
 
 ```
 Spring Boot → AiService → OpenAI Java SDK → localhost:8000/v1 → MLX OpenAI Server
@@ -106,7 +108,7 @@ Spring Boot → AiService → OpenAI Java SDK → localhost:8000/v1 → MLX Open
 | `APP_AI_PROVIDER` | `mlx` (implicit) sau `stub` (teste/CI) |
 | `APP_AI_BASE_URL` | URL OpenAI-compatible (implicit `http://127.0.0.1:8000/v1`) |
 | `APP_AI_API_KEY` | Bearer token (implicit `mlx-local`) |
-| `APP_AI_MODEL` | Model MLX (implicit `mlx-community/gemma-4-12B-it-qat-4bit`) |
+| `APP_AI_MODEL` | Override opțional; apelurile API folosesc calea locală din cache după download |
 | `APP_AI_HUGGINGFACE_REPO` | Repo Hugging Face pentru download weights |
 | `APP_AI_AUTO_DOWNLOAD_MODEL` | Descarcă automat Gemma 4 12B la startup dacă lipsește |
 | `APP_AI_AUTO_START_SERVER` | Pornește `mlx_vlm.server` local dacă nu rulează |

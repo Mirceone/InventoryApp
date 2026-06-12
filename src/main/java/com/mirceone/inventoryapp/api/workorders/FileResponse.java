@@ -1,5 +1,8 @@
 package com.mirceone.inventoryapp.api.workorders;
 
+import com.mirceone.inventoryapp.model.FileClassificationSource;
+import com.mirceone.inventoryapp.model.FileClassificationStatus;
+
 import java.time.Instant;
 import java.util.UUID;
 
@@ -14,6 +17,9 @@ public record FileResponse(
         long sizeBytes,
         Instant createdAt,
         UUID uploadedByUserId,
-        String uploadedByEmail
+        String uploadedByEmail,
+        FileClassificationStatus classificationStatus,
+        FileClassificationSource classificationSource,
+        String classificationError
 ) {
 }

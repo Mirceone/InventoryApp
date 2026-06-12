@@ -20,15 +20,18 @@ public class AiStartupValidator {
     private final AppIntegrationProperties props;
     private final MlxModelEnsurer modelEnsurer;
     private final MlxServerManager serverManager;
+    private final MlxCommandResolver mlxCommandResolver;
 
     public AiStartupValidator(
             AppIntegrationProperties props,
             MlxModelEnsurer modelEnsurer,
-            MlxServerManager serverManager
+            MlxServerManager serverManager,
+            MlxCommandResolver mlxCommandResolver
     ) {
         this.props = props;
         this.modelEnsurer = modelEnsurer;
         this.serverManager = serverManager;
+        this.mlxCommandResolver = mlxCommandResolver;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -79,9 +82,9 @@ public class AiStartupValidator {
                     """, ai.getBaseUrl(), ai.getModel(), ai.getApiKey(), modelsUrl);
         } else {
             log.info(
-                    "AI MLX ready (baseUrl={}, model={}, weights={})",
+                    "AI MLX ready (baseUrl={}, apiModel={}, weights={})",
                     ai.getBaseUrl(),
-                    ai.getModel(),
+                    mlxCommandResolver.resolvedApiModelId(),
                     modelDir.toAbsolutePath());
         }
     }

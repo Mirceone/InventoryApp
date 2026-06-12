@@ -14,6 +14,7 @@ public class AppIntegrationProperties {
     private final Ops ops = new Ops();
     private final Documents documents = new Documents();
     private final Invoices invoices = new Invoices();
+    private final Files files = new Files();
     private final Ai ai = new Ai();
 
     public Features getFeatures() {
@@ -36,6 +37,10 @@ public class AppIntegrationProperties {
         return invoices;
     }
 
+    public Files getFiles() {
+        return files;
+    }
+
     public Ai getAi() {
         return ai;
     }
@@ -43,6 +48,7 @@ public class AppIntegrationProperties {
     public static class Features {
         private boolean routesEnabled = true;
         private boolean workOrderEnabled = true;
+        private boolean workOrderAiEnabled = true;
         private boolean opsEnabled = true;
 
         public boolean isRoutesEnabled() {
@@ -59,6 +65,14 @@ public class AppIntegrationProperties {
 
         public void setWorkOrderEnabled(boolean workOrderEnabled) {
             this.workOrderEnabled = workOrderEnabled;
+        }
+
+        public boolean isWorkOrderAiEnabled() {
+            return workOrderAiEnabled;
+        }
+
+        public void setWorkOrderAiEnabled(boolean workOrderAiEnabled) {
+            this.workOrderAiEnabled = workOrderAiEnabled;
         }
 
         public boolean isOpsEnabled() {
@@ -132,6 +146,27 @@ public class AppIntegrationProperties {
 
         public void setBatchMaxTotalBytes(long batchMaxTotalBytes) {
             this.batchMaxTotalBytes = batchMaxTotalBytes;
+        }
+    }
+
+    public static class Files {
+        private Duration classificationPollInterval = Duration.ofSeconds(2);
+        private int classificationBatchSize = 10;
+
+        public Duration getClassificationPollInterval() {
+            return classificationPollInterval;
+        }
+
+        public void setClassificationPollInterval(Duration classificationPollInterval) {
+            this.classificationPollInterval = classificationPollInterval;
+        }
+
+        public int getClassificationBatchSize() {
+            return classificationBatchSize;
+        }
+
+        public void setClassificationBatchSize(int classificationBatchSize) {
+            this.classificationBatchSize = classificationBatchSize;
         }
     }
 

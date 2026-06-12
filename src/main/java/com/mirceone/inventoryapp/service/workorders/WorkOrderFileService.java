@@ -1,6 +1,8 @@
 package com.mirceone.inventoryapp.service.workorders;
 
 import com.mirceone.inventoryapp.config.AppIntegrationProperties;
+import com.mirceone.inventoryapp.model.FileClassificationSource;
+import com.mirceone.inventoryapp.model.FileClassificationStatus;
 import com.mirceone.inventoryapp.model.UserEntity;
 import com.mirceone.inventoryapp.model.WorkOrderFileEntity;
 import com.mirceone.inventoryapp.model.WorkOrderFolderEntity;
@@ -11,6 +13,9 @@ import com.mirceone.inventoryapp.service.firms.access.FirmAccessService;
 import com.mirceone.inventoryapp.service.firms.access.FirmPermission;
 import com.mirceone.inventoryapp.service.storage.BlobStorage;
 import com.mirceone.inventoryapp.service.support.AfterCommitExecutor;
+import com.mirceone.inventoryapp.service.workorders.classification.FileClassificationService;
+import com.mirceone.inventoryapp.service.workorders.classification.UploadClassification;
+import com.mirceone.inventoryapp.service.workorders.classification.WorkOrderFileClassifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -42,8 +47,9 @@ import static org.springframework.http.HttpStatus.*;
 
 /**
  * Upload, listing, download, rename, manual move and delete of work order files.
- * Classification is synchronous and deterministic (extension rules), so there is no
- * pending state and no background pipeline.
+ * Classification uses extension rules and filename heuristics synchronously; when AI is
+ * enabled, unmatched files are placed in the catch-all folder with PENDING status and
+ * classified asynchronously by {@link com.mirceone.inventoryapp.service.workorders.classification.FileClassificationWorker}.
  */
 @Service
 public class WorkOrderFileService {
@@ -55,7 +61,8 @@ public class WorkOrderFileService {
     private final FirmAccessService firmAccessService;
     private final WorkOrderService workOrderService;
     private final WorkOrderFolderService folderService;
-    private final FileClassifier fileClassifier;
+    private final WorkOrderFileClassifier workOrderFileClassifier;
+    private final FileClassificationService fileClassificationService;
     private final WorkOrderFileRepository fileRepository;
     private final WorkOrderFolderRepository folderRepository;
     private final UserRepository userRepository;
@@ -68,7 +75,8 @@ public class WorkOrderFileService {
             FirmAccessService firmAccessService,
             WorkOrderService workOrderService,
             WorkOrderFolderService folderService,
-            FileClassifier fileClassifier,
+            WorkOrderFileClassifier workOrderFileClassifier,
+            FileClassificationService fileClassificationService,
             WorkOrderFileRepository fileRepository,
             WorkOrderFolderRepository folderRepository,
             UserRepository userRepository,
@@ -80,7 +88,8 @@ public class WorkOrderFileService {
         this.firmAccessService = firmAccessService;
         this.workOrderService = workOrderService;
         this.folderService = folderService;
-        this.fileClassifier = fileClassifier;
+        this.workOrderFileClassifier = workOrderFileClassifier;
+        this.fileClassificationService = fileClassificationService;
         this.fileRepository = fileRepository;
         this.folderRepository = folderRepository;
         this.userRepository = userRepository;
@@ -89,6 +98,11 @@ public class WorkOrderFileService {
         this.afterCommitExecutor = afterCommitExecutor;
     }
 
+    // Intentionally NOT @Transactional: the blob is streamed to storage here, and we must not
+    // hold a DB connection/transaction open for the duration of a (potentially large) upload.
+    // The single row insert runs in its own transaction (insertWithUniqueName); afterCommit
+    // scheduling therefore degrades to immediate execution, which is safe because the row is
+    // already durably committed before processAsync is invoked.
     public FileSummary upload(UUID userId, UUID firmId, UUID workOrderId, MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new ResponseStatusException(BAD_REQUEST, "File is required");
@@ -203,6 +217,9 @@ public class WorkOrderFileService {
         if (spec.folderId() != null && !spec.folderId().equals(file.getFolderId())) {
             WorkOrderFolderEntity target = folderService.requireFolder(workOrderId, spec.folderId());
             file.setFolderId(target.getId());
+            file.setClassificationStatus(FileClassificationStatus.CLASSIFIED);
+            file.setClassificationSource(FileClassificationSource.MANUAL);
+            file.setClassificationError(null);
             if (spec.displayName() == null) {
                 file.setDisplayName(displayNameDeduplicator.uniqueName(target.getId(), file.getDisplayName()));
             }
@@ -259,7 +276,6 @@ public class WorkOrderFileService {
         }
 
         String extension = ExtensionNormalizer.fromFilename(sanitized);
-        UUID folderId = fileClassifier.resolveFolderId(workOrderId, extension);
 
         UUID fileId = UUID.randomUUID();
         String storageKey = WorkOrderStorageKeys.fileKey(
@@ -286,11 +302,19 @@ public class WorkOrderFileService {
         }
 
         String storedMime = contentType != null && !contentType.isBlank() ? contentType.strip() : null;
+        UploadClassification classification = workOrderFileClassifier.classifyOnUpload(
+                workOrderId, sanitized, storedMime, extension);
 
         try {
-            return insertWithUniqueName(
-                    fileId, firmId, workOrderId, folderId, userId,
-                    sanitized, extension, storedMime, sizeToPersist, checksum, storageKey);
+            WorkOrderFileEntity saved = insertWithUniqueName(
+                    fileId, firmId, workOrderId, classification.folderId(), userId,
+                    sanitized, extension, storedMime, sizeToPersist, checksum, storageKey,
+                    classification.status(), classification.source());
+            if (classification.status() == FileClassificationStatus.PENDING) {
+                UUID savedId = saved.getId();
+                afterCommitExecutor.execute(() -> fileClassificationService.processAsync(savedId));
+            }
+            return saved;
         } catch (RuntimeException e) {
             // Compensation: the blob was written before the row; remove it on failure.
             deleteBlobQuietly(storageKey);
@@ -309,7 +333,9 @@ public class WorkOrderFileService {
             String mimeType,
             long sizeBytes,
             String checksum,
-            String storageKey
+            String storageKey,
+            FileClassificationStatus classificationStatus,
+            FileClassificationSource classificationSource
     ) {
         DataIntegrityViolationException last = null;
         for (int attempt = 0; attempt < INSERT_RETRY_ATTEMPTS; attempt++) {
@@ -326,7 +352,9 @@ public class WorkOrderFileService {
                         mimeType,
                         sizeBytes,
                         checksum,
-                        storageKey
+                        storageKey,
+                        classificationStatus,
+                        classificationSource
                 ));
             } catch (DataIntegrityViolationException e) {
                 // Concurrent upload claimed the same name; recompute and retry.
@@ -380,7 +408,10 @@ public class WorkOrderFileService {
                 entity.getSizeBytes(),
                 entity.getCreatedAt(),
                 entity.getUploadedByUserId(),
-                emails.getOrDefault(entity.getUploadedByUserId(), "")
+                emails.getOrDefault(entity.getUploadedByUserId(), ""),
+                entity.getClassificationStatus(),
+                entity.getClassificationSource(),
+                entity.getClassificationError()
         );
     }
 

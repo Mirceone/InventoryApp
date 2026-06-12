@@ -42,6 +42,25 @@ public class MlxCommandResolver {
         return resolveModelCacheDir(props.getAi());
     }
 
+    /**
+     * Model id sent to MLX OpenAI API. Must match the path used when starting mlx_vlm.server
+     * to avoid reloading weights on every request.
+     */
+    public String resolvedApiModelId() {
+        return resolveApiModelId(props.getAi(), modelCacheDir());
+    }
+
+    static String resolveApiModelId(AppIntegrationProperties.Ai ai, Path cacheDir) {
+        String configured = ai.getModel();
+        if (configured != null && !configured.isBlank()) {
+            Path path = Path.of(configured.trim());
+            if (path.isAbsolute() && Files.isDirectory(path)) {
+                return path.toAbsolutePath().toString();
+            }
+        }
+        return cacheDir.toAbsolutePath().toString();
+    }
+
     public boolean isEnsureScriptAvailable() {
         return Files.isExecutable(Path.of(pythonPrefix.getFirst()))
                 && Files.isRegularFile(ensureModelScript);
