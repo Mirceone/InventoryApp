@@ -86,7 +86,7 @@ class InventoryServiceTest {
         UUID userId = UUID.randomUUID();
         UUID firmId = UUID.randomUUID();
         UUID productId = UUID.randomUUID();
-        when(productRepository.findByIdAndFirmId(productId, firmId)).thenReturn(Optional.empty());
+        when(productRepository.findByIdAndFirmIdForUpdate(productId, firmId)).thenReturn(Optional.empty());
 
         ResponseStatusException ex = assertThrows(
                 ResponseStatusException.class,
@@ -103,7 +103,7 @@ class InventoryServiceTest {
         CategoryEntity misc = new CategoryEntity(firmId, "Misc");
         ProductEntity product = new ProductEntity(firmId, "Mouse", "SKU-2", 1, true, null, misc, null, null);
 
-        when(productRepository.findByIdAndFirmId(productId, firmId)).thenReturn(Optional.of(product));
+        when(productRepository.findByIdAndFirmIdForUpdate(productId, firmId)).thenReturn(Optional.of(product));
 
         ResponseStatusException ex = assertThrows(
                 ResponseStatusException.class,
@@ -120,7 +120,7 @@ class InventoryServiceTest {
         CategoryEntity misc = new CategoryEntity(firmId, "Misc");
         ProductEntity product = new ProductEntity(firmId, "Keyboard", "KB-1", 10, true, null, misc, null, null);
 
-        when(productRepository.findByIdAndFirmId(productId, firmId)).thenReturn(Optional.of(product));
+        when(productRepository.findByIdAndFirmIdForUpdate(productId, firmId)).thenReturn(Optional.of(product));
         when(productRepository.save(any(ProductEntity.class))).thenReturn(product);
 
         inventoryService.setStock(userId, firmId, productId, 20);
@@ -136,7 +136,7 @@ class InventoryServiceTest {
         CategoryEntity misc = new CategoryEntity(firmId, "Misc");
         ProductEntity product = new ProductEntity(firmId, "Mouse", "MS-1", 10, true, null, misc, null, null);
 
-        when(productRepository.findByIdAndFirmId(productId, firmId)).thenReturn(Optional.of(product));
+        when(productRepository.findByIdAndFirmIdForUpdate(productId, firmId)).thenReturn(Optional.of(product));
         when(productRepository.save(any(ProductEntity.class))).thenReturn(product);
 
         inventoryService.adjustStock(userId, firmId, productId, -3);
@@ -153,7 +153,7 @@ class InventoryServiceTest {
         ProductEntity product = new ProductEntity(firmId, "Mouse", "MS-LOW", 5, true, 4, misc, null, null);
         ReflectionTestUtils.setField(product, "id", productId);
 
-        when(productRepository.findByIdAndFirmId(productId, firmId)).thenReturn(Optional.of(product));
+        when(productRepository.findByIdAndFirmIdForUpdate(productId, firmId)).thenReturn(Optional.of(product));
         when(productRepository.save(any(ProductEntity.class))).thenReturn(product);
 
         inventoryService.adjustStock(userId, firmId, productId, -2);
@@ -170,7 +170,7 @@ class InventoryServiceTest {
         ProductEntity product = new ProductEntity(firmId, "Mouse", "MS-LOW", 3, true, 4, misc, null, null);
         ReflectionTestUtils.setField(product, "id", productId);
 
-        when(productRepository.findByIdAndFirmId(productId, firmId)).thenReturn(Optional.of(product));
+        when(productRepository.findByIdAndFirmIdForUpdate(productId, firmId)).thenReturn(Optional.of(product));
         when(productRepository.save(any(ProductEntity.class))).thenReturn(product);
 
         inventoryService.adjustStock(userId, firmId, productId, -1);

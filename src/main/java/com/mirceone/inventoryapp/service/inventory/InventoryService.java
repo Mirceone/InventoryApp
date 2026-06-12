@@ -139,12 +139,12 @@ public class InventoryService {
     public InventoryContracts.ProductSummary setStock(UUID userId, UUID firmId, UUID productId, int quantity) {
         firmAccessService.requireOperationalPermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
 
-        ProductEntity product = productRepository.findByIdAndFirmId(productId, firmId)
+        ProductEntity product = productRepository.findByIdAndFirmIdForUpdate(productId, firmId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found"));
 
         int previousQuantity = product.getCurrentQuantity();
         int newQuantity = quantity;
-        product.setCurrentQuantity(quantity);
+        product.setCurrentQuantity(newQuantity);
         product = productRepository.save(product);
         saveStockEvent(userId, firmId, product.getId(), StockChangeType.SET, previousQuantity, newQuantity);
         notifyIfLowStockCrossed(firmId, product, previousQuantity, newQuantity);
@@ -155,7 +155,7 @@ public class InventoryService {
     public InventoryContracts.ProductSummary adjustStock(UUID userId, UUID firmId, UUID productId, int delta) {
         firmAccessService.requireOperationalPermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
 
-        ProductEntity product = productRepository.findByIdAndFirmId(productId, firmId)
+        ProductEntity product = productRepository.findByIdAndFirmIdForUpdate(productId, firmId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found"));
 
         int previousQuantity = product.getCurrentQuantity();

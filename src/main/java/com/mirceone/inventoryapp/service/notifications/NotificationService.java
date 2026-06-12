@@ -230,8 +230,8 @@ public class NotificationService {
             FirmStatusChangeSource source
     ) {
         String newLabel = FirmStatusCatalog.displayLabel(newStatus);
+        FirmEntity firm = requireFirm(firmId);
         runInNewTransaction(() -> {
-            FirmEntity firm = requireFirm(firmId);
             String previousLabel = previousStatus == null ? "Unknown" : FirmStatusCatalog.displayLabel(previousStatus);
             String sourceLabel = source == FirmStatusChangeSource.SYSTEM ? "automat" : "manual";
             String body = "Statusul firmei %s a fost actualizat %s din %s in %s."
@@ -260,7 +260,7 @@ public class NotificationService {
             );
         });
         if (newStatus == FirmStatus.CRITICAL) {
-            sendCriticalStatusEmail(requireFirm(firmId), newLabel, message);
+            sendCriticalStatusEmail(firm, newLabel, message);
         }
     }
 
