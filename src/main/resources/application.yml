@@ -126,11 +126,11 @@ app:
     markitdown-command: ${APP_INVOICES_MARKITDOWN_COMMAND:markitdown}
     markitdown-timeout: ${APP_INVOICES_MARKITDOWN_TIMEOUT:120s}
     extractor: ${APP_INVOICES_EXTRACTOR:markitdown}
-    ocr-fallback-enabled: ${APP_INVOICES_OCR_FALLBACK_ENABLED:true}
-    ocr-python-command: ${APP_INVOICES_OCR_PYTHON_COMMAND:python3}
-    ocr-script-path: ${APP_INVOICES_OCR_SCRIPT_PATH:}
-    ocr-languages: ${APP_INVOICES_OCR_LANGUAGES:ro,en}
-    ocr-timeout: ${APP_INVOICES_OCR_TIMEOUT:5m}
+    # VLM fallback for scanned PDFs / image invoices (replaces the former OCR path):
+    # MarkItDown is used for PDFs with a real text layer; otherwise pages are rasterized and
+    # sent to the local vision model.
+    vlm-max-pages: ${APP_INVOICES_VLM_MAX_PAGES:8}
+    vlm-render-dpi: ${APP_INVOICES_VLM_RENDER_DPI:200}
 
   storage:
     root: ${APP_STORAGE_ROOT:${user.home}/.inventoryapp/uploads}

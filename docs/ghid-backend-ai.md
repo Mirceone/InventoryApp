@@ -133,7 +133,7 @@ Răspuns API fișier: `classificationStatus`, `classificationSource`, `classific
 
 Ops: când `app.features.ops-enabled=true`, prompt/răspuns (excerpt) în `ops_events` cu model id rezolvat.
 
-Facturile folosesc MarkItDown + OCR, nu LLM.
+Facturile: PDF cu strat de text → MarkItDown; PDF scanat / imagine → VLM (pagini rasterizate trimise modelului vision). Apoi textul rezultat este transformat în JSON structurat de LLM (`InvoiceStructuringService`).
 
 ## Mapare env vechi Ollama (referință)
 

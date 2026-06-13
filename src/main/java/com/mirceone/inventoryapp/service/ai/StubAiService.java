@@ -44,4 +44,10 @@ public class StubAiService implements AiService {
         String safe = userPrompt == null ? "" : userPrompt.replace("\"", "\\\"");
         return "{\"stub\":true,\"prompt\":\"" + safe + "\"}";
     }
+
+    @Override
+    public String chatVision(String prompt, List<AiImage> images) {
+        int count = images == null ? 0 : images.size();
+        return "# Invoice (scanned via VLM stub)\n\n- pages: " + count + "\n";
+    }
 }

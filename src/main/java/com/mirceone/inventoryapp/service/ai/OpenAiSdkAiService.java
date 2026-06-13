@@ -3,6 +3,9 @@ package com.mirceone.inventoryapp.service.ai;
 import com.openai.client.OpenAIClient;
 import com.openai.models.chat.completions.ChatCompletion;
 import com.openai.models.chat.completions.ChatCompletionAssistantMessageParam;
+import com.openai.models.chat.completions.ChatCompletionContentPart;
+import com.openai.models.chat.completions.ChatCompletionContentPartImage;
+import com.openai.models.chat.completions.ChatCompletionContentPartText;
 import com.openai.models.chat.completions.ChatCompletionCreateParams;
 import com.openai.models.chat.completions.ChatCompletionMessageParam;
 import com.openai.models.chat.completions.ChatCompletionSystemMessageParam;
@@ -14,6 +17,7 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 
 @Service
@@ -46,6 +50,33 @@ public class OpenAiSdkAiService implements AiService {
                 .responseFormat(ResponseFormat.ofJsonObject(ResponseFormatJsonObject.builder().build()))
                 .build();
         return extractContent(client.chat().completions().create(params));
+    }
+
+    @Override
+    public String chatVision(String prompt, List<AiImage> images) {
+        List<ChatCompletionContentPart> parts = new ArrayList<>(images.size() + 1);
+        parts.add(ChatCompletionContentPart.ofText(
+                ChatCompletionContentPartText.builder().text(prompt).build()));
+        for (AiImage image : images) {
+            parts.add(ChatCompletionContentPart.ofImageUrl(
+                    ChatCompletionContentPartImage.builder()
+                            .imageUrl(ChatCompletionContentPartImage.ImageUrl.builder()
+                                    .url(toDataUrl(image))
+                                    .build())
+                            .build()));
+        }
+        ChatCompletionCreateParams params = ChatCompletionCreateParams.builder()
+                .model(modelIdResolver.resolvedModelId())
+                .addMessage(ChatCompletionUserMessageParam.builder()
+                        .contentOfArrayOfContentParts(parts)
+                        .build())
+                .build();
+        return extractContent(client.chat().completions().create(params));
+    }
+
+    private static String toDataUrl(AiImage image) {
+        String mime = image.mimeType() != null && !image.mimeType().isBlank() ? image.mimeType() : "image/png";
+        return "data:" + mime + ";base64," + Base64.getEncoder().encodeToString(image.data());
     }
 
     static List<ChatCompletionMessageParam> toSdkMessages(List<AiChatMessage> messages) {

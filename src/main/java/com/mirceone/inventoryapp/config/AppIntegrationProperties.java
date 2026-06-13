@@ -194,11 +194,9 @@ public class AppIntegrationProperties {
         private String markitdownCommand = "markitdown";
         private Duration markitdownTimeout = Duration.ofSeconds(120);
         private String extractor = "markitdown";
-        private boolean ocrFallbackEnabled = true;
-        private String ocrPythonCommand = "python3";
-        private String ocrScriptPath = "";
-        private String ocrLanguages = "ro,en";
-        private Duration ocrTimeout = Duration.ofMinutes(5);
+        // VLM fallback for scanned PDFs / image invoices (replaces the former OCR path).
+        private int vlmMaxPages = 8;
+        private int vlmRenderDpi = 200;
 
         public int getPageMaxSize() {
             return pageMaxSize;
@@ -288,44 +286,20 @@ public class AppIntegrationProperties {
             this.extractor = extractor;
         }
 
-        public boolean isOcrFallbackEnabled() {
-            return ocrFallbackEnabled;
+        public int getVlmMaxPages() {
+            return vlmMaxPages;
         }
 
-        public void setOcrFallbackEnabled(boolean ocrFallbackEnabled) {
-            this.ocrFallbackEnabled = ocrFallbackEnabled;
+        public void setVlmMaxPages(int vlmMaxPages) {
+            this.vlmMaxPages = vlmMaxPages;
         }
 
-        public String getOcrPythonCommand() {
-            return ocrPythonCommand;
+        public int getVlmRenderDpi() {
+            return vlmRenderDpi;
         }
 
-        public void setOcrPythonCommand(String ocrPythonCommand) {
-            this.ocrPythonCommand = ocrPythonCommand;
-        }
-
-        public String getOcrScriptPath() {
-            return ocrScriptPath;
-        }
-
-        public void setOcrScriptPath(String ocrScriptPath) {
-            this.ocrScriptPath = ocrScriptPath;
-        }
-
-        public String getOcrLanguages() {
-            return ocrLanguages;
-        }
-
-        public void setOcrLanguages(String ocrLanguages) {
-            this.ocrLanguages = ocrLanguages;
-        }
-
-        public Duration getOcrTimeout() {
-            return ocrTimeout;
-        }
-
-        public void setOcrTimeout(Duration ocrTimeout) {
-            this.ocrTimeout = ocrTimeout;
+        public void setVlmRenderDpi(int vlmRenderDpi) {
+            this.vlmRenderDpi = vlmRenderDpi;
         }
     }
 

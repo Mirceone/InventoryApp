@@ -16,4 +16,10 @@ public interface AiService {
      * Single-turn completion with JSON object response format when supported by the backend.
      */
     String chatJson(String userPrompt);
+
+    /**
+     * Single-turn vision completion: the prompt plus one or more images, returning the model's
+     * text response. Used to transcribe scanned (image-only) documents via the VLM.
+     */
+    String chatVision(String prompt, List<AiImage> images);
 }
