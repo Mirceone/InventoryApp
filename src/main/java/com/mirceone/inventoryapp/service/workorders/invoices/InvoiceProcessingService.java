@@ -11,6 +11,7 @@ import com.mirceone.inventoryapp.service.support.AfterCommitExecutor;
 import com.mirceone.inventoryapp.service.workorders.invoices.extraction.InvoiceStructuringService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.core.io.Resource;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -36,6 +37,8 @@ public class InvoiceProcessingService {
     private final InvoiceStructuringService structuringService;
     private final AfterCommitExecutor afterCommitExecutor;
     private final AppIntegrationProperties props;
+    /** Self-reference so the async path calls processInvoice through the transactional proxy. */
+    private final InvoiceProcessingService self;
 
     public InvoiceProcessingService(
             WorkOrderInvoiceRepository invoiceRepository,
@@ -44,7 +47,8 @@ public class InvoiceProcessingService {
             InvoiceExtractionRepository extractionRepository,
             InvoiceStructuringService structuringService,
             AfterCommitExecutor afterCommitExecutor,
-            AppIntegrationProperties props
+            AppIntegrationProperties props,
+            @Lazy InvoiceProcessingService self
     ) {
         this.invoiceRepository = invoiceRepository;
         this.blobStorage = blobStorage;
@@ -53,12 +57,15 @@ public class InvoiceProcessingService {
         this.structuringService = structuringService;
         this.afterCommitExecutor = afterCommitExecutor;
         this.props = props;
+        this.self = self;
     }
 
     @Async
     public void processAsync(UUID invoiceId) {
         try {
-            processInvoice(invoiceId);
+            // Through the proxy so @Transactional applies on the async thread (a direct call would
+            // be self-invocation and skip the transaction).
+            self.processInvoice(invoiceId);
         } catch (Exception e) {
             log.warn("Async invoice processing failed id={}: {}", invoiceId, e.getMessage());
         }

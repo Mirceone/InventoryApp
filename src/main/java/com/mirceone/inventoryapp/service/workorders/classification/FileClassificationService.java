@@ -7,6 +7,7 @@ import com.mirceone.inventoryapp.repository.WorkOrderFileRepository;
 import com.mirceone.inventoryapp.service.workorders.DisplayNameDeduplicator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,23 +25,29 @@ public class FileClassificationService {
     private final MlxFolderClassifier mlxFolderClassifier;
     private final FileNameHeuristicClassifier heuristicClassifier;
     private final DisplayNameDeduplicator displayNameDeduplicator;
+    /** Self-reference so the async path calls processFile through the transactional proxy. */
+    private final FileClassificationService self;
 
     public FileClassificationService(
             WorkOrderFileRepository fileRepository,
             MlxFolderClassifier mlxFolderClassifier,
             FileNameHeuristicClassifier heuristicClassifier,
-            DisplayNameDeduplicator displayNameDeduplicator
+            DisplayNameDeduplicator displayNameDeduplicator,
+            @Lazy FileClassificationService self
     ) {
         this.fileRepository = fileRepository;
         this.mlxFolderClassifier = mlxFolderClassifier;
         this.heuristicClassifier = heuristicClassifier;
         this.displayNameDeduplicator = displayNameDeduplicator;
+        this.self = self;
     }
 
     @Async
     public void processAsync(UUID fileId) {
         try {
-            processFile(fileId);
+            // Through the proxy so @Transactional applies on the async thread (a direct call would
+            // be self-invocation and skip the transaction).
+            self.processFile(fileId);
         } catch (Exception e) {
             log.warn("Async file classification failed id={}: {}", fileId, e.getMessage());
         }

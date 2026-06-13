@@ -41,7 +41,8 @@ class FileClassificationServiceTest {
                 fileRepository,
                 mlxFolderClassifier,
                 new FileNameHeuristicClassifier(),
-                displayNameDeduplicator
+                displayNameDeduplicator,
+                null // self proxy only used on the @Async path, which these unit tests don't exercise
         );
         workOrderId = UUID.randomUUID();
         targetFolderId = UUID.randomUUID();

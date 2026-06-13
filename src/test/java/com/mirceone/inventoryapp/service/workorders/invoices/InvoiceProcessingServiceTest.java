@@ -52,7 +52,8 @@ class InvoiceProcessingServiceTest {
         props.getFeatures().setInvoiceExtractionEnabled(false);
         processingService = new InvoiceProcessingService(
                 invoiceRepository, blobStorage, markdownExtractor,
-                extractionRepository, structuringService, afterCommitExecutor, props);
+                extractionRepository, structuringService, afterCommitExecutor, props,
+                null); // self proxy only used on the @Async path, which these unit tests don't exercise
     }
 
     @Test
