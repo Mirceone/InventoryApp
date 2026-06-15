@@ -36,4 +36,22 @@ public final class FirmWebMapper {
     public static List<FirmResponse> toResponseList(List<FirmContracts.FirmSummary> firms) {
         return firms.stream().map(FirmWebMapper::toResponse).toList();
     }
+
+    public static FirmStatusHistoryResponse toHistoryResponse(FirmContracts.FirmStatusHistoryEntry entry) {
+        return new FirmStatusHistoryResponse(
+                entry.id(),
+                entry.previousStatus() == null ? null : entry.previousStatus().name(),
+                entry.previousStatusDisplayLabel(),
+                entry.newStatus().name(),
+                entry.newStatusDisplayLabel(),
+                entry.message(),
+                entry.actorUserId(),
+                entry.source().name(),
+                entry.createdAt()
+        );
+    }
+
+    public static List<FirmStatusHistoryResponse> toHistoryResponseList(List<FirmContracts.FirmStatusHistoryEntry> history) {
+        return history.stream().map(FirmWebMapper::toHistoryResponse).toList();
+    }
 }

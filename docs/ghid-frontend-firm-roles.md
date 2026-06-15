@@ -2,14 +2,14 @@
 
 > **Ghid complet actualizat:** [`ghid-frontend-firme.md`](ghid-frontend-firme.md) — include roluri, status firmă (ACTIVE/PAUSED/CRITICAL), Settings și checklist.
 
-Document pentru implementarea în UI a rolurilor la nivel de firmă. Backend-ul expune rolul utilizatorului curent per firmă; **nu există încă** API de invitație/listă membri (vine în faza 2).
+Document pentru implementarea în UI a rolurilor la nivel de firmă. Backend-ul expune rolul utilizatorului curent per firmă, iar flow-ul de echipă este disponibil în [`ghid-frontend-invitations.md`](./ghid-frontend-invitations.md).
 
 ## Context
 
 | Rol API (`role`) | Label UI (`roleDisplayLabel`) | Cine îl are azi |
 |------------------|-------------------------------|-----------------|
 | `OWNER` | `Admin` | Creatorul la `POST /firms` |
-| `MEMBER` | `Angajat` | Viitori angajați (încă nu există flow de invite) |
+| `MEMBER` | `Angajat` | Angajat / membru echipă, inclusiv prin invitație |
 
 - În DB și în JSON folosiți **`role`** (`OWNER` / `MEMBER`), nu `ADMIN`.
 - `roleDisplayLabel` e doar pentru afișare (română din backend); poți ignora label-ul și mapa local dacă vrei i18n.
@@ -36,7 +36,7 @@ Toate răspunsurile firmă (create, list, rename) au aceeași formă:
   "role": "OWNER",
   "roleDisplayLabel": "Admin",
   "status": "ACTIVE",
-  "statusDisplayLabel": "Activ",
+  "statusDisplayLabel": "Active",
   "statusMessage": null
 }
 ```
@@ -151,12 +151,10 @@ const canManageFirm = isFirmOwner(activeFirm);
 
 Dacă un MEMBER apelează PATCH/DELETE (bug UI sau API manual), backend răspunde **403** — afișează mesaj clar, nu „Unexpected server error”.
 
-### Ce NU implementați încă (faza 2 backend)
+### Ce NU implementați încă
 
-- Listă membri, invite email, schimbare rol, transfer ownership
 - Roluri `MANAGER`, `WAREHOUSE`, `VIEWER` — nu există în API
-
-Puteți lăsa un placeholder „Echipă (în curând)” dezactivat pentru OWNER.
+- Permission matrix mai granular pentru membri
 
 ## Fluxuri ecran
 
@@ -181,7 +179,7 @@ Puteți lăsa un placeholder „Echipă (în curând)” dezactivat pentru OWNER
 - **Salvează:** `PATCH /firms/{activeFirm.id}` cu `{ name }`.
 - **Ștergere:** modal cu confirmare (tastează numele firmei), apoi `DELETE`, apoi `refreshFirms()` și navigare dacă nu mai rămân firme.
 
-### 3. Restul aplicației (inventar, dosare)
+### 3. Restul aplicației (inventar, work orders)
 
 - **Nu** restricționa încă după rol — MEMBER are aceleași drepturi ca OWNER la inventar/documente.
 - Nu ascunde upload-uri sau CRUD produse pentru MEMBER în faza 1.
@@ -253,14 +251,14 @@ function firmHasRoleFields(firm: unknown): firm is Firm {
 1. User A: `POST /firms` → verifică `role: "OWNER"`, `roleDisplayLabel: "Admin"`.
 2. `GET /firms` → același rol.
 3. `PATCH` rename → OK; UI actualizează numele.
-4. User B (alt cont): nu poate PATCH/DELETE firma lui A (403) — dacă nu există invite, B nu apare în lista de firme a lui A.
+4. User B (alt cont): nu poate PATCH/DELETE firma lui A (403) — dacă nu există invite acceptat, B nu apare în lista de firme a lui A.
 5. User A: `DELETE` firmă → 204; lista firme goală; redirect onboarding.
 
 ## Legături backend
 
 - Roluri și permisiuni: `service/firms/access/` (`FirmAccessService`, `RolePermissions`, `MemberRoleCatalog`)
 - Controller: `api/firms/FirmController.java`
-- Plan viitor membri: faza 2 în planul „Arhitectură și roluri firmă” (`GET/POST/PATCH/DELETE .../members`)
+- Echipă și invitații: vezi [`ghid-frontend-invitations.md`](./ghid-frontend-invitations.md)
 
 ## Întrebări frecvente
 
@@ -270,8 +268,8 @@ function firmHasRoleFields(firm: unknown): firm is Firm {
 **Afișăm „Admin” în loc de „Owner”?**  
 Da, folosește `roleDisplayLabel` din API sau mapare locală echivalentă.
 
-**MEMBER poate șterge dosare?**  
-Da, în faza 1 — restricțiile pe dosare/inventar vor veni cu roluri granulare (faza 3).
+**MEMBER poate șterge work orders?**  
+Da, în faza 1 — restricțiile pe work orders/inventar vor veni cu roluri granulare (faza 3).
 
 **Cum adaug un angajat?**  
-Încă nu din API; faza 2 va adăuga invite. Până atunci doar OWNER per firmă creată de user.
+Da, prin flow-ul de invitații și management membri din [`ghid-frontend-invitations.md`](./ghid-frontend-invitations.md).

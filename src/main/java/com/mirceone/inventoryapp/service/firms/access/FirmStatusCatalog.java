@@ -2,20 +2,24 @@ package com.mirceone.inventoryapp.service.firms.access;
 
 import com.mirceone.inventoryapp.model.FirmStatus;
 
-import java.util.Map;
+import java.util.Locale;
 
 public final class FirmStatusCatalog {
-
-    private static final Map<FirmStatus, String> DISPLAY_LABELS = Map.of(
-            FirmStatus.ACTIVE, "Activ",
-            FirmStatus.PAUSED, "În pauză",
-            FirmStatus.CRITICAL, "Critic"
-    );
 
     private FirmStatusCatalog() {
     }
 
+    /**
+     * UI label derived from API enum: ACTIVE → Active, PAUSED → Paused, CRITICAL → Critical.
+     */
     public static String displayLabel(FirmStatus status) {
-        return DISPLAY_LABELS.getOrDefault(status, status.name());
+        if (status == null) {
+            return "";
+        }
+        String name = status.name();
+        if (name.isEmpty()) {
+            return name;
+        }
+        return name.charAt(0) + name.substring(1).toLowerCase(Locale.ROOT);
     }
 }

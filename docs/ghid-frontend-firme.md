@@ -2,13 +2,13 @@
 
 Document unic pentru colegul de la frontend — aliniat la API-ul actual din `InventoryApp` (Spring Boot). Acoperă **roluri** (`OWNER` / `MEMBER`), **status firmă** (`ACTIVE` / `PAUSED` / `CRITICAL`), rename, delete și blocarea operațiilor.
 
-Ghiduri vechi (parțiale): [`ghid-frontend-firm-roles.md`](ghid-frontend-firm-roles.md), [`ghid-frontend-firm-status.md`](ghid-frontend-firm-status.md).
+Pentru notification center vezi [`ghid-frontend-notifications.md`](./ghid-frontend-notifications.md). Ghidurile vechi [`ghid-frontend-firm-roles.md`](ghid-frontend-firm-roles.md) și [`ghid-frontend-firm-status.md`](ghid-frontend-firm-status.md) sunt doar referințe istorice; pentru implementări noi folosiți acest document.
 
 ---
 
 ## 1. Verificare backend (înainte de UI)
 
-1. Pornește backend din `/Users/mirceone/IdeaProjects/InventoryApp` (migrare **V17** pentru status).
+1. Pornește backend din `/Users/mirceone/IdeaProjects/InventoryApp` și verifică să fie aplicate migrările curente până la **V21**.
 2. Swagger → tag **Firms** — trebuie să existe:
    - `GET /firms`
    - `POST /firms`
@@ -32,7 +32,7 @@ Toate răspunsurile firmă (create, list, rename, update status) au **aceeași f
   "role": "OWNER",
   "roleDisplayLabel": "Admin",
   "status": "ACTIVE",
-  "statusDisplayLabel": "Activ",
+  "statusDisplayLabel": "Active",
   "statusMessage": null
 }
 ```
@@ -42,7 +42,7 @@ Toate răspunsurile firmă (create, list, rename, update status) au **aceeași f
 | `role` | `roleDisplayLabel` | Logică UI |
 |--------|-------------------|-----------|
 | `OWNER` | Admin | Poate rename, delete, schimbare status |
-| `MEMBER` | Angajat | Nu poate gestiona firma (vine după invite, faza 2) |
+| `MEMBER` | Angajat | Nu poate gestiona firma; se adaugă prin invitație — vezi [ghid-frontend-invitations.md](./ghid-frontend-invitations.md) |
 
 Folosiți **`role`** pentru `if`, nu `roleDisplayLabel`. Nu trimiteți `ADMIN` la API — e doar label UI.
 
@@ -50,9 +50,9 @@ Folosiți **`role`** pentru `if`, nu `roleDisplayLabel`. Nu trimiteți `ADMIN` l
 
 | `status` | `statusDisplayLabel` | Operații pe firmă |
 |----------|----------------------|-------------------|
-| `ACTIVE` | Activ | Permise (după rol) |
-| `PAUSED` | În pauză | **Toate blocate** (citire + scriere inventar/dosare) |
-| `CRITICAL` | Critic | **Toate blocate** + afișați `statusMessage` |
+| `ACTIVE` | Active | Permise (după rol) |
+| `PAUSED` | Paused | **Toate blocate** (citire + scriere inventar/work-orders) |
+| `CRITICAL` | Critical | **Toate blocate** + afișați `statusMessage` |
 
 La `POST /firms`, status implicit: **`ACTIVE`**.
 
@@ -233,7 +233,7 @@ export async function deleteFirm(token: string, firmId: string): Promise<void> {
 
 | Zonă | OWNER | MEMBER |
 |------|:-----:|:------:|
-| Inventar, dosare, documente | da* | da* |
+| Inventar, work orders, documente | da* | da* |
 | Settings → rename | da* | nu |
 | Settings → status | da* | nu |
 | Settings → delete | da* | nu |
@@ -244,8 +244,8 @@ export async function deleteFirm(token: string, firmId: string): Promise<void> {
 
 | Zonă | ACTIVE | PAUSED | CRITICAL |
 |------|:------:|:------:|:--------:|
-| Navigare inventar / dosare | da | **nu** | **nu** |
-| API `/firms/{id}/products`, dossiers, documents | da | **403** | **403** |
+| Navigare inventar / work orders | da | **nu** | **nu** |
+| API `/firms/{id}/products`, work-orders, files | da | **403** | **403** |
 | Settings → rename | da (OWNER) | **nu** (403) | **nu** (403) |
 | Settings → schimbare status | da (OWNER) | **da** (OWNER) | **da** (OWNER) |
 | Settings → delete | da (OWNER) | da (OWNER) | da (OWNER) |
@@ -284,7 +284,7 @@ Când `activeFirm && !isFirmOperational(activeFirm)`:
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ ⚠ În pauză — operațiunile sunt oprite.  [Mergi la Setări] │
+│ ⚠ Paused — operațiunile sunt oprite.  [Mergi la Setări] │
 └────────────────────────────────────────────────────────────┘
 ```
 
@@ -293,23 +293,23 @@ Pentru `CRITICAL`, include `statusMessage` dacă există.
 ### 7.3 Layout principal — guard pe rută
 
 ```typescript
-// În layout-ul care învelește /inventory, /dossiers, etc.
+// În layout-ul care învelește /inventory, /work-orders, etc.
 if (activeFirm && !isFirmOperational(activeFirm)) {
   return <FirmBlockedPage firm={activeFirm} />;
 }
 ```
 
-Nu apelați produse/dosare — veți primi oricum 403.
+Nu apelați produse/work-orders — veți primi oricum 403.
 
 ### 7.4 Settings firmă
 
 ```
 ┌──────────────────────────────────────────────────┐
-│ Demo SRL    [Admin]  [Activ ▼]                   │
+│ Demo SRL    [Admin]  [Active ▼]                  │
 ├──────────────────────────────────────────────────┤
 │ Status firmă (OWNER)                             │
-│   [ Activ | În pauză | Critic ]                  │
-│   Mesaj (dacă Critic): [________________]        │
+│   [ Active | Paused | Critical ]                 │
+│   Mesaj (dacă Critical): [________________]      │
 │   [Salvează status]                              │
 ├──────────────────────────────────────────────────┤
 │ Nume firmă (OWNER, doar ACTIVE)                  │
@@ -370,22 +370,22 @@ export function firmHasFullContract(firm: unknown): firm is Firm {
 Dacă `GET /firms` nu are `status`:
 
 - Banner: „Backend-ul trebuie actualizat (status firmă).”
-- Dezactivați inventar/dosare sau presupuneți `ACTIVE` doar ca fallback fragil.
+- Dezactivați inventar/work-orders sau presupuneți `ACTIVE` doar ca fallback fragil.
 
 Verificare Swagger: există `PATCH /firms/{firmId}/status`.
 
 ---
 
-## 10. Endpoints firmă-scoped (inventar, dosare)
+## 10. Endpoints firmă-scoped (inventar, work orders)
 
 Aceste rute **respectă statusul** — nu e nevoie de header suplimentar:
 
 - `GET/POST/PATCH/DELETE` `/firms/{firmId}/products...`
 - `/firms/{firmId}/categories...`
-- `/firms/{firmId}/dossiers...`
-- `/firms/{firmId}/dossiers/{dossierId}/documents...`
+- `/firms/{firmId}/work-orders...`
+- `/firms/{firmId}/work-orders/{workOrderId}/folders...` și `.../files...`
 
-Taxonomie dosare (5 foldere): [`ghid-backend-five-folders.md`](ghid-backend-five-folders.md).
+Structura de foldere work orders (definită de utilizator): [`ghid-backend-work-orders.md`](ghid-backend-work-orders.md).
 
 ---
 
@@ -400,7 +400,7 @@ Taxonomie dosare (5 foldere): [`ghid-backend-five-folders.md`](ghid-backend-five
 - [ ] Badge rol + badge status în selector firme
 - [ ] `activeFirm` complet în context
 - [ ] Banner când `!isFirmOperational(activeFirm)`
-- [ ] Guard pe rute inventar/dosare
+- [ ] Guard pe rute inventar/work-orders
 - [ ] Settings: status (OWNER), rename (OWNER + ACTIVE), delete (OWNER)
 
 ### Erori
@@ -419,9 +419,10 @@ Taxonomie dosare (5 foldere): [`ghid-backend-five-folders.md`](ghid-backend-five
 
 ## 12. Ce nu e încă în API
 
-- Invite membri, listă echipă, schimbare rol angajat
-- Job automat care setează CRITICAL (există `setFirmStatusSystem` doar server-side)
-- Istoric schimbări status, notificări email
+- Invitații membri, listă echipă, schimbare rol, remove member și transfer ownership — **disponibile:** [ghid-frontend-invitations.md](./ghid-frontend-invitations.md)
+- Istoric schimbări status — disponibil prin `GET /firms/{firmId}/status/history`
+- Job automat conservator care setează `CRITICAL` la inconsistențe de ownership — disponibil server-side
+- Notificări inbox per user — **disponibile:** [ghid-frontend-notifications.md](./ghid-frontend-notifications.md)
 
 ---
 

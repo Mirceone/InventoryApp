@@ -2,6 +2,7 @@ package com.mirceone.inventoryapp.api.firms;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mirceone.inventoryapp.model.FirmStatus;
+import com.mirceone.inventoryapp.model.FirmStatusChangeSource;
 import com.mirceone.inventoryapp.model.MemberRole;
 import com.mirceone.inventoryapp.security.AuthRateLimiter;
 import com.mirceone.inventoryapp.service.firms.FirmContracts;
@@ -53,11 +54,30 @@ class FirmControllerWebMvcTest {
     ) {
         String roleLabel = role == MemberRole.OWNER ? "Admin" : "Angajat";
         String statusLabel = switch (status) {
-            case ACTIVE -> "Activ";
-            case PAUSED -> "În pauză";
-            case CRITICAL -> "Critic";
+            case ACTIVE -> "Active";
+            case PAUSED -> "Paused";
+            case CRITICAL -> "Critical";
         };
         return new FirmContracts.FirmSummary(id, name, role, roleLabel, status, statusLabel, statusMessage);
+    }
+
+    private static FirmContracts.FirmStatusHistoryEntry history(
+            UUID id,
+            FirmStatus previousStatus,
+            FirmStatus newStatus,
+            String message
+    ) {
+        return new FirmContracts.FirmStatusHistoryEntry(
+                id,
+                previousStatus,
+                previousStatus == null ? "" : previousStatus.name().charAt(0) + previousStatus.name().substring(1).toLowerCase(),
+                newStatus,
+                newStatus.name().charAt(0) + newStatus.name().substring(1).toLowerCase(),
+                message,
+                UUID.randomUUID(),
+                FirmStatusChangeSource.SYSTEM,
+                java.time.Instant.parse("2026-01-01T00:00:00Z")
+        );
     }
 
     @Test
@@ -74,7 +94,7 @@ class FirmControllerWebMvcTest {
                         .content(objectMapper.writeValueAsString(new CreateFirmRequest("Demo SRL"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
-                .andExpect(jsonPath("$.statusDisplayLabel").value("Activ"));
+                .andExpect(jsonPath("$.statusDisplayLabel").value("Active"));
     }
 
     @Test
@@ -92,7 +112,7 @@ class FirmControllerWebMvcTest {
                         .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt -> jwt.subject(userId.toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[1].status").value("PAUSED"))
-                .andExpect(jsonPath("$[1].statusDisplayLabel").value("În pauză"));
+                .andExpect(jsonPath("$[1].statusDisplayLabel").value("Paused"));
     }
 
     @Test
@@ -112,6 +132,22 @@ class FirmControllerWebMvcTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CRITICAL"))
                 .andExpect(jsonPath("$.statusMessage").value("DB issue"));
+    }
+
+    @Test
+    void getFirmStatusHistoryReturnsEntries() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID firmId = UUID.randomUUID();
+
+        when(firmService.getFirmStatusHistory(userId, firmId)).thenReturn(List.of(
+                history(UUID.randomUUID(), FirmStatus.ACTIVE, FirmStatus.CRITICAL, "Integrity issue")
+        ));
+
+        mockMvc.perform(get("/firms/{firmId}/status/history", firmId)
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt -> jwt.subject(userId.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].newStatus").value("CRITICAL"))
+                .andExpect(jsonPath("$[0].source").value("SYSTEM"));
     }
 
     @Test

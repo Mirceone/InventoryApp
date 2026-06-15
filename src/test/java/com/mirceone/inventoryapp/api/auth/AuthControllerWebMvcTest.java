@@ -5,22 +5,27 @@ import com.mirceone.inventoryapp.security.AuthRateLimiter;
 import com.mirceone.inventoryapp.service.auth.AuthContracts;
 import com.mirceone.inventoryapp.service.auth.AuthService;
 import com.mirceone.inventoryapp.service.auth.PasswordResetService;
+import com.mirceone.inventoryapp.service.firms.members.FirmInvitationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.HttpStatus.UNAUTHORIZED;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -40,6 +45,9 @@ class AuthControllerWebMvcTest {
 
     @MockitoBean
     private PasswordResetService passwordResetService;
+
+    @MockitoBean
+    private FirmInvitationService firmInvitationService;
 
     @MockitoBean
     @Qualifier("authRateLimiter")
@@ -133,6 +141,59 @@ class AuthControllerWebMvcTest {
                                 "newPassword", "newpassword123"
                         ))))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void previewInvitationReturnsMappedResponse() throws Exception {
+        when(firmInvitationService.previewInvitation("invite-token"))
+                .thenReturn(new com.mirceone.inventoryapp.service.firms.members.FirmInvitationContracts.InvitationPreview(
+                        "Demo Firm",
+                        "member@example.com",
+                        "m***@example.com",
+                        com.mirceone.inventoryapp.model.MemberRole.MEMBER,
+                        "Angajat",
+                        Instant.parse("2026-12-31T00:00:00Z"),
+                        true
+                ));
+
+        mockMvc.perform(get("/auth/invitations/{token}", "invite-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.firmName").value("Demo Firm"))
+                .andExpect(jsonPath("$.role").value("MEMBER"))
+                .andExpect(jsonPath("$.accountExists").value(true));
+    }
+
+    @Test
+    void acceptInvitationWithoutAuthenticationReturnsTokenPair() throws Exception {
+        AuthContracts.IssuedTokenPair response =
+                new AuthContracts.IssuedTokenPair("Bearer", "access-token", 3600L, "refresh-token", 1209600L);
+        when(firmInvitationService.acceptInvitation(any(), any())).thenReturn(response);
+
+        mockMvc.perform(post("/auth/accept-invitation")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "token", "invite-token",
+                                "displayName", "New Member",
+                                "password", "password123"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("access-token"))
+                .andExpect(jsonPath("$.refreshToken").value("refresh-token"));
+    }
+
+    @Test
+    void acceptInvitationWithAuthenticationReturnsTokenPair() throws Exception {
+        UUID userId = UUID.randomUUID();
+        AuthContracts.IssuedTokenPair response =
+                new AuthContracts.IssuedTokenPair("Bearer", "access-token", 3600L, "refresh-token", 1209600L);
+        when(firmInvitationService.acceptInvitation(any(), any())).thenReturn(response);
+
+        mockMvc.perform(post("/auth/accept-invitation")
+                        .with(SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt -> jwt.subject(userId.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("token", "invite-token"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("access-token"));
     }
 
     @Test

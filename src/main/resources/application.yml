@@ -35,7 +35,8 @@ management:
 
 app:
   jwt:
-    # În lipsa unui secret explicit, aplicația va genera unul la startup (doar pentru demo local).
+    # Fără secret explicit, aplicația generează unul la startup DOAR în profilele dev/local/test;
+    # în orice alt profil pornirea eșuează (vezi JwtConfig). Trebuie Base64, minim 256 biți.
     issuer: ${APP_JWT_ISSUER:http://localhost:8080}
     secret: ${APP_JWT_SECRET:}
     access-token-ttl-seconds: ${APP_JWT_ACCESS_TOKEN_TTL_SECONDS:3600}
@@ -43,6 +44,9 @@ app:
     max-active-refresh-tokens-per-user: ${APP_JWT_MAX_ACTIVE_REFRESH_TOKENS_PER_USER:5}
   security:
     rate-limit:
+      # Setează true DOAR când rulezi în spatele unui reverse proxy de încredere care adaugă
+      # X-Forwarded-For; altfel clienții și-ar putea falsifica cheia de rate-limit.
+      trust-forwarded-for: ${APP_SECURITY_RATE_LIMIT_TRUST_FORWARDED_FOR:false}
       auth:
         max-requests: ${APP_SECURITY_RATE_LIMIT_AUTH_MAX_REQUESTS:20}
         window-seconds: ${APP_SECURITY_RATE_LIMIT_AUTH_WINDOW_SECONDS:60}
@@ -63,6 +67,12 @@ app:
   password-reset:
     token-ttl-seconds: ${APP_PASSWORD_RESET_TOKEN_TTL_SECONDS:1800}
 
+  invitations:
+    token-ttl-seconds: ${APP_INVITATIONS_TOKEN_TTL_SECONDS:604800}
+
+  firms:
+    ownership-transfer-confirmation-ttl-seconds: ${APP_FIRMS_OWNERSHIP_TRANSFER_CONFIRMATION_TTL_SECONDS:900}
+
   email:
     resend:
       api-key: ${RESEND_API_KEY:}
@@ -70,24 +80,64 @@ app:
 
   features:
     routes-enabled: ${APP_FEATURES_ROUTES:true}
-    dossier-enabled: ${APP_FEATURES_DOSSIER:true}
-    dossier-ai-enabled: ${APP_FEATURES_DOSSIER_AI:true}
+    work-order-enabled: ${APP_FEATURES_WORK_ORDER:true}
+    work-order-ai-enabled: ${APP_FEATURES_WORK_ORDER_AI:true}
+    invoice-extraction-enabled: ${APP_FEATURES_INVOICE_EXTRACTION:true}
     ops-enabled: ${APP_FEATURES_OPS:true}
 
-  ollama:
-    base-url: ${APP_OLLAMA_BASE_URL:http://127.0.0.1:11434}
-    model: ${APP_OLLAMA_MODEL:gemma4:e4b}
-    chat-timeout: ${APP_OLLAMA_CHAT_TIMEOUT:120s}
-    send-document-content: ${APP_OLLAMA_SEND_DOCUMENT_CONTENT:false}
-    max-content-chars: ${APP_OLLAMA_MAX_CONTENT_CHARS:8000}
+  ai:
+    provider: ${APP_AI_PROVIDER:mlx}
+    base-url: ${APP_AI_BASE_URL:http://127.0.0.1:8000/v1}
+    api-key: ${APP_AI_API_KEY:mlx-local}
+    model: ${APP_AI_MODEL:mlx-community/gemma-4-12B-it-qat-4bit}
+    huggingface-repo: ${APP_AI_HUGGINGFACE_REPO:mlx-community/gemma-4-12B-it-qat-4bit}
+    model-cache-dir: ${APP_AI_MODEL_CACHE_DIR:}
+    auto-download-model: ${APP_AI_AUTO_DOWNLOAD_MODEL:true}
+    auto-start-server: ${APP_AI_AUTO_START_SERVER:true}
+    server-port: ${APP_AI_SERVER_PORT:8000}
+    model-download-timeout: ${APP_AI_MODEL_DOWNLOAD_TIMEOUT:60m}
+    server-start-timeout: ${APP_AI_SERVER_START_TIMEOUT:10m}
+    mlx-python-command: ${APP_AI_MLX_PYTHON_COMMAND:python3}
+    ensure-model-script-path: ${APP_AI_ENSURE_MODEL_SCRIPT_PATH:}
+    timeout: ${APP_AI_TIMEOUT:120s}
+    max-retries: ${APP_AI_MAX_RETRIES:2}
+    # Max simultaneous inference calls against the local model. Keep at 1 for a single GPU:
+    # concurrent requests exhaust VRAM and crash the MLX server (Metal OOM).
+    max-concurrent-requests: ${APP_AI_MAX_CONCURRENT_REQUESTS:1}
+    # Local AI slot — the on-device backend used for sensitive document processing (invoices).
+    # MUST stay on-device (mlx|stub); a cloud value here fails startup. Blank => uses app.ai.provider.
+    local:
+      provider: ${APP_AI_LOCAL_PROVIDER:}
+    # General AI slot — non-sensitive functions only. May optionally use a cloud model.
+    # provider: mlx (reuse local on-device) | claude | openai
+    general:
+      provider: ${APP_AI_GENERAL_PROVIDER:mlx}
+      claude:
+        model: ${APP_AI_GENERAL_CLAUDE_MODEL:claude-sonnet-4-6}
+        api-key: ${ANTHROPIC_API_KEY:}
+
+  files:
+    classification-poll-interval: ${APP_FILES_CLASSIFICATION_POLL_INTERVAL:2s}
+    classification-batch-size: ${APP_FILES_CLASSIFICATION_BATCH_SIZE:10}
 
   documents:
     page-max-size: ${APP_DOCUMENTS_PAGE_MAX_SIZE:100}
     batch-max-files: ${APP_DOCUMENTS_BATCH_MAX_FILES:50}
     batch-max-total-bytes: ${APP_DOCUMENTS_BATCH_MAX_TOTAL_BYTES:3221225472}
-    organization-poll-interval: ${APP_DOCUMENTS_ORGANIZATION_POLL_INTERVAL:2s}
-    ai-subfolders-enabled: ${APP_DOCUMENTS_AI_SUBFOLDERS:true}
-    organization-batch-size: ${APP_DOCUMENTS_ORGANIZATION_BATCH_SIZE:20}
+
+  invoices:
+    page-max-size: ${APP_INVOICES_PAGE_MAX_SIZE:100}
+    batch-max-files: ${APP_INVOICES_BATCH_MAX_FILES:50}
+    batch-max-total-bytes: ${APP_INVOICES_BATCH_MAX_TOTAL_BYTES:3221225472}
+    allowed-mime-prefixes:
+      - application/pdf
+      - image/
+    structuring-poll-interval: ${APP_INVOICES_STRUCTURING_POLL_INTERVAL:3s}
+    structuring-batch-size: ${APP_INVOICES_STRUCTURING_BATCH_SIZE:5}
+    # Invoice extraction reads the document with the vision model directly: PDF pages are
+    # rasterized (capped + DPI below) and sent to the VLM, which returns product-shaped JSON.
+    vlm-max-pages: ${APP_INVOICES_VLM_MAX_PAGES:8}
+    vlm-render-dpi: ${APP_INVOICES_VLM_RENDER_DPI:200}
 
   storage:
     root: ${APP_STORAGE_ROOT:${user.home}/.inventoryapp/uploads}

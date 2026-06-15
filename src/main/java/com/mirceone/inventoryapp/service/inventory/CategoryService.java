@@ -36,8 +36,7 @@ public class CategoryService {
     }
 
     public InventoryContracts.CategorySummary createCategory(UUID userId, UUID firmId, String rawName) {
-        firmAccessService.requirePermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
-        firmAccessService.requireFirmOperationalForUser(firmId, userId);
+        firmAccessService.requireOperationalPermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
 
         String name = normalizeName(rawName);
         if (DEFAULT_CATEGORY_NAME.equalsIgnoreCase(name)) {
@@ -62,8 +61,7 @@ public class CategoryService {
     }
 
     public InventoryContracts.CategorySummary updateCategory(UUID userId, UUID firmId, UUID categoryId, String rawName) {
-        firmAccessService.requirePermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
-        firmAccessService.requireFirmOperationalForUser(firmId, userId);
+        firmAccessService.requireOperationalPermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
 
         CategoryEntity category = categoryRepository.findByIdAndFirmId(categoryId, firmId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
@@ -87,8 +85,7 @@ public class CategoryService {
     }
 
     public void deleteCategory(UUID userId, UUID firmId, UUID categoryId) {
-        firmAccessService.requirePermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
-        firmAccessService.requireFirmOperationalForUser(firmId, userId);
+        firmAccessService.requireOperationalPermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
 
         CategoryEntity category = categoryRepository.findByIdAndFirmId(categoryId, firmId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Category not found"));
@@ -103,8 +100,7 @@ public class CategoryService {
     }
 
     public List<InventoryContracts.CategorySummary> listCategories(UUID userId, UUID firmId) {
-        firmAccessService.requirePermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
-        firmAccessService.requireFirmOperationalForUser(firmId, userId);
+        firmAccessService.requireOperationalPermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
         return categoryRepository.findAllByFirmIdOrderByNameAsc(firmId).stream()
                 .map(c -> new InventoryContracts.CategorySummary(c.getId(), c.getName()))
                 .toList();

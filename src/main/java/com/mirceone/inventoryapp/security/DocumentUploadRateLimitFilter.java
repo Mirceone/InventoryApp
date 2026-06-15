@@ -17,22 +17,26 @@ import java.time.Instant;
 import java.util.regex.Pattern;
 
 /**
- * Rate limits POST uploads to {@code /firms/{uuid}/documents} and {@code .../documents/batch}.
+ * Rate limits POST uploads to work-order file and invoice upload endpoints.
  */
 @Component
 public class DocumentUploadRateLimitFilter extends OncePerRequestFilter {
 
-    private static final Pattern FIRM_DOCUMENTS_POST =
-            Pattern.compile("^/firms/[0-9a-fA-F\\-]{36}/dossiers/[0-9a-fA-F\\-]{36}/documents(/batch)?$");
+    private static final Pattern FIRM_UPLOAD_POST =
+            Pattern.compile("^/firms/[0-9a-fA-F\\-]{36}/work-orders/[0-9a-fA-F\\-]{36}/(files|invoices)(/batch)?$");
 
     private final AuthRateLimiter documentUploadRateLimiter;
+    private final boolean trustForwardedFor;
     private final ObjectMapper objectMapper;
 
     public DocumentUploadRateLimitFilter(
             @Qualifier("documentUploadRateLimiter") AuthRateLimiter documentUploadRateLimiter,
+            @org.springframework.beans.factory.annotation.Value("${app.security.rate-limit.trust-forwarded-for:false}")
+            boolean trustForwardedFor,
             ObjectMapper objectMapper
     ) {
         this.documentUploadRateLimiter = documentUploadRateLimiter;
+        this.trustForwardedFor = trustForwardedFor;
         this.objectMapper = objectMapper;
     }
 
@@ -42,13 +46,13 @@ public class DocumentUploadRateLimitFilter extends OncePerRequestFilter {
             return true;
         }
         String uri = request.getRequestURI();
-        return !FIRM_DOCUMENTS_POST.matcher(uri).matches();
+        return !FIRM_UPLOAD_POST.matcher(uri).matches();
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        String key = request.getRemoteAddr() + "|" + request.getRequestURI();
+        String key = ClientIpResolver.resolve(request, trustForwardedFor) + "|" + request.getRequestURI();
         if (!documentUploadRateLimiter.allow(key)) {
             writeTooManyRequestsResponse(request, response);
             return;

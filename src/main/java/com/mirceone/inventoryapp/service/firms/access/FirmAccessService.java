@@ -40,6 +40,11 @@ public class FirmAccessService {
         }
     }
 
+    public void requireOperationalPermission(UUID firmId, UUID userId, FirmPermission permission) {
+        requirePermission(firmId, userId, permission);
+        requireFirmOperational(firmId);
+    }
+
     public void requireFirmOperational(UUID firmId) {
         FirmEntity firm = firmRepository.findById(firmId)
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Firm not found"));

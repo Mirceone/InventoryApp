@@ -1,8 +1,10 @@
 package com.mirceone.inventoryapp.service.firms;
 
 import com.mirceone.inventoryapp.model.FirmStatus;
+import com.mirceone.inventoryapp.model.FirmStatusChangeSource;
 import com.mirceone.inventoryapp.model.MemberRole;
 
+import java.time.Instant;
 import java.util.UUID;
 
 public final class FirmContracts {
@@ -27,6 +29,19 @@ public final class FirmContracts {
             FirmStatus status,
             String statusDisplayLabel,
             String statusMessage
+    ) {
+    }
+
+    public record FirmStatusHistoryEntry(
+            UUID id,
+            FirmStatus previousStatus,
+            String previousStatusDisplayLabel,
+            FirmStatus newStatus,
+            String newStatusDisplayLabel,
+            String message,
+            UUID actorUserId,
+            FirmStatusChangeSource source,
+            Instant createdAt
     ) {
     }
 }

@@ -11,6 +11,7 @@ import com.mirceone.inventoryapp.repository.RouteStopRepository;
 import com.mirceone.inventoryapp.repository.StockChangeEventRepository;
 import com.mirceone.inventoryapp.service.firms.access.FirmAccessService;
 import com.mirceone.inventoryapp.service.firms.access.FirmPermission;
+import com.mirceone.inventoryapp.service.notifications.NotificationService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -29,6 +30,7 @@ public class InventoryService {
     private final CategoryRepository categoryRepository;
     private final FirmAccessService firmAccessService;
     private final RouteStopRepository routeStopRepository;
+    private final NotificationService notificationService;
     private final int defaultReorderThreshold;
 
     public InventoryService(
@@ -37,6 +39,7 @@ public class InventoryService {
             CategoryRepository categoryRepository,
             FirmAccessService firmAccessService,
             RouteStopRepository routeStopRepository,
+            NotificationService notificationService,
             @Value("${app.inventory.default-reorder-threshold:4}") int defaultReorderThreshold
     ) {
         this.productRepository = productRepository;
@@ -44,12 +47,12 @@ public class InventoryService {
         this.categoryRepository = categoryRepository;
         this.firmAccessService = firmAccessService;
         this.routeStopRepository = routeStopRepository;
+        this.notificationService = notificationService;
         this.defaultReorderThreshold = defaultReorderThreshold;
     }
 
     public InventoryContracts.ProductSummary createProduct(UUID userId, UUID firmId, InventoryContracts.CreateProductSpec request) {
-        firmAccessService.requirePermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
-        firmAccessService.requireFirmOperationalForUser(firmId, userId);
+        firmAccessService.requireOperationalPermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
 
         boolean reorderEnabled = request.reorderEnabled() != null ? request.reorderEnabled() : true;
         CategoryEntity category = resolveCategory(firmId, request.categoryId());
@@ -66,13 +69,19 @@ public class InventoryService {
                 preferredStop
         );
         product = productRepository.save(product);
+        notificationService.notifyProductCreatedAfterCommit(
+                firmId,
+                product.getId(),
+                product.getName(),
+                product.getSku(),
+                product.getCurrentQuantity()
+        );
 
         return toResponse(product);
     }
 
     public InventoryContracts.ProductSummary updateProduct(UUID userId, UUID firmId, UUID productId, InventoryContracts.UpdateProductSpec request) {
-        firmAccessService.requirePermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
-        firmAccessService.requireFirmOperationalForUser(firmId, userId);
+        firmAccessService.requireOperationalPermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
         if (request.name() == null && request.sku() == null && request.reorderEnabled() == null && request.reorderThreshold() == null
                 && request.categoryId() == null && request.imgUrl() == null
                 && request.preferredRouteStopId() == null && request.clearPreferredRouteStop() == null) {
@@ -111,8 +120,7 @@ public class InventoryService {
     }
 
     public List<InventoryContracts.BuyListLine> listBuyList(UUID userId, UUID firmId) {
-        firmAccessService.requirePermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
-        firmAccessService.requireFirmOperationalForUser(firmId, userId);
+        firmAccessService.requireOperationalPermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
 
         return productRepository.findNeedingRestock(firmId, defaultReorderThreshold).stream()
                 .map(this::toBuyListItem)
@@ -120,8 +128,7 @@ public class InventoryService {
     }
 
     public List<InventoryContracts.ProductSummary> listProducts(UUID userId, UUID firmId) {
-        firmAccessService.requirePermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
-        firmAccessService.requireFirmOperationalForUser(firmId, userId);
+        firmAccessService.requireOperationalPermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
 
         return productRepository.findAllByFirmId(firmId)
                 .stream()
@@ -130,26 +137,25 @@ public class InventoryService {
     }
 
     public InventoryContracts.ProductSummary setStock(UUID userId, UUID firmId, UUID productId, int quantity) {
-        firmAccessService.requirePermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
-        firmAccessService.requireFirmOperationalForUser(firmId, userId);
+        firmAccessService.requireOperationalPermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
 
-        ProductEntity product = productRepository.findByIdAndFirmId(productId, firmId)
+        ProductEntity product = productRepository.findByIdAndFirmIdForUpdate(productId, firmId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found"));
 
         int previousQuantity = product.getCurrentQuantity();
         int newQuantity = quantity;
-        product.setCurrentQuantity(quantity);
+        product.setCurrentQuantity(newQuantity);
         product = productRepository.save(product);
         saveStockEvent(userId, firmId, product.getId(), StockChangeType.SET, previousQuantity, newQuantity);
+        notifyIfLowStockCrossed(firmId, product, previousQuantity, newQuantity);
 
         return toResponse(product);
     }
 
     public InventoryContracts.ProductSummary adjustStock(UUID userId, UUID firmId, UUID productId, int delta) {
-        firmAccessService.requirePermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
-        firmAccessService.requireFirmOperationalForUser(firmId, userId);
+        firmAccessService.requireOperationalPermission(firmId, userId, FirmPermission.INVENTORY_WRITE);
 
-        ProductEntity product = productRepository.findByIdAndFirmId(productId, firmId)
+        ProductEntity product = productRepository.findByIdAndFirmIdForUpdate(productId, firmId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found"));
 
         int previousQuantity = product.getCurrentQuantity();
@@ -161,6 +167,7 @@ public class InventoryService {
         product.setCurrentQuantity(newQuantity);
         product = productRepository.save(product);
         saveStockEvent(userId, firmId, product.getId(), StockChangeType.ADJUST, previousQuantity, newQuantity);
+        notifyIfLowStockCrossed(firmId, product, previousQuantity, newQuantity);
 
         return toResponse(product);
     }
@@ -183,6 +190,25 @@ public class InventoryService {
                 newQuantity - previousQuantity
         );
         stockChangeEventRepository.save(event);
+    }
+
+    private void notifyIfLowStockCrossed(UUID firmId, ProductEntity product, int previousQuantity, int newQuantity) {
+        if (!product.isReorderEnabled()) {
+            return;
+        }
+        int threshold = effectiveMinThreshold(product);
+        boolean wasLow = previousQuantity < threshold;
+        boolean isLow = newQuantity < threshold;
+        if (!wasLow && isLow) {
+            notificationService.notifyProductLowStockAfterCommit(
+                    firmId,
+                    product.getId(),
+                    product.getName(),
+                    product.getSku(),
+                    newQuantity,
+                    threshold
+            );
+        }
     }
 
     private InventoryContracts.ProductSummary toResponse(ProductEntity product) {

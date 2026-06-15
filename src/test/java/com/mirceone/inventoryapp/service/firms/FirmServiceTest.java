@@ -1,16 +1,20 @@
 package com.mirceone.inventoryapp.service.firms;
 
-import com.mirceone.inventoryapp.model.FirmDocumentEntity;
 import com.mirceone.inventoryapp.model.FirmEntity;
 import com.mirceone.inventoryapp.model.FirmMemberEntity;
 import com.mirceone.inventoryapp.model.FirmStatus;
 import com.mirceone.inventoryapp.model.MemberRole;
-import com.mirceone.inventoryapp.repository.FirmDocumentRepository;
 import com.mirceone.inventoryapp.repository.FirmMemberRepository;
 import com.mirceone.inventoryapp.repository.FirmRepository;
-import com.mirceone.inventoryapp.service.documents.storage.DocumentStorage;
+import com.mirceone.inventoryapp.repository.FirmStatusHistoryRepository;
+import com.mirceone.inventoryapp.repository.WorkOrderActivityRepository;
+import com.mirceone.inventoryapp.repository.WorkOrderFileRepository;
+import com.mirceone.inventoryapp.repository.WorkOrderInvoiceRepository;
 import com.mirceone.inventoryapp.service.firms.access.FirmAccessService;
+import com.mirceone.inventoryapp.service.storage.BlobStorage;
 import com.mirceone.inventoryapp.service.inventory.CategoryService;
+import com.mirceone.inventoryapp.service.notifications.NotificationService;
+import com.mirceone.inventoryapp.service.support.AfterCommitExecutor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,11 +41,19 @@ class FirmServiceTest {
     @Mock
     private FirmMemberRepository firmMemberRepository;
     @Mock
-    private FirmDocumentRepository firmDocumentRepository;
+    private WorkOrderFileRepository workOrderFileRepository;
     @Mock
-    private DocumentStorage documentStorage;
+    private WorkOrderInvoiceRepository workOrderInvoiceRepository;
+    @Mock
+    private WorkOrderActivityRepository workOrderActivityRepository;
+    @Mock
+    private FirmStatusHistoryRepository firmStatusHistoryRepository;
+    @Mock
+    private BlobStorage blobStorage;
     @Mock
     private CategoryService categoryService;
+    @Mock
+    private NotificationService notificationService;
 
     private FirmService firmService;
 
@@ -55,10 +67,15 @@ class FirmServiceTest {
         firmService = new FirmService(
                 firmRepository,
                 firmMemberRepository,
-                firmDocumentRepository,
-                documentStorage,
+                workOrderFileRepository,
+                workOrderInvoiceRepository,
+                workOrderActivityRepository,
+                firmStatusHistoryRepository,
+                blobStorage,
                 categoryService,
-                firmAccessService
+                firmAccessService,
+                notificationService,
+                new AfterCommitExecutor()
         );
         userId = UUID.randomUUID();
         firmId = UUID.randomUUID();
@@ -107,20 +124,24 @@ class FirmServiceTest {
         );
 
         assertEquals(FirmStatus.PAUSED, result.status());
-        assertEquals("În pauză", result.statusDisplayLabel());
+        assertEquals("Paused", result.statusDisplayLabel());
+        verify(notificationService).notifyFirmStatusChangedAfterCommit(
+                firmId, FirmStatus.ACTIVE, FirmStatus.PAUSED, null, com.mirceone.inventoryapp.model.FirmStatusChangeSource.MANUAL
+        );
     }
 
     @Test
-    void deleteFirmAsOwnerDeletesFirmAndCollectsStorageKeys() {
+    void deleteFirmAsOwnerDeletesFilesFirmAndBlobPrefix() throws Exception {
         when(firmMemberRepository.findByFirmIdAndUserId(firmId, userId))
                 .thenReturn(Optional.of(new FirmMemberEntity(firmId, userId, MemberRole.OWNER)));
         when(firmRepository.findById(firmId)).thenReturn(Optional.of(firm));
-        FirmDocumentEntity doc = mock(FirmDocumentEntity.class);
-        when(doc.getStorageKey()).thenReturn(firmId + "/dossiers/x/f.pdf");
-        when(firmDocumentRepository.findAllByFirmId(firmId)).thenReturn(List.of(doc));
 
         firmService.deleteFirm(userId, firmId);
 
+        verify(workOrderFileRepository).deleteByFirmId(firmId);
+        verify(workOrderInvoiceRepository).deleteByFirmId(firmId);
+        verify(workOrderActivityRepository).deleteByFirmId(firmId);
         verify(firmRepository).deleteById(firmId);
+        verify(blobStorage).deleteByPrefix(firmId + "/");
     }
 }

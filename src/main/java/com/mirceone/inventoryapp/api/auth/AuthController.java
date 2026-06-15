@@ -1,17 +1,18 @@
 package com.mirceone.inventoryapp.api.auth;
 
+import com.mirceone.inventoryapp.api.support.CurrentUserId;
 import com.mirceone.inventoryapp.service.auth.AuthService;
 import com.mirceone.inventoryapp.service.auth.PasswordResetService;
+import com.mirceone.inventoryapp.service.firms.members.FirmInvitationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,10 +28,16 @@ public class AuthController {
 
     private final AuthService authService;
     private final PasswordResetService passwordResetService;
+    private final FirmInvitationService firmInvitationService;
 
-    public AuthController(AuthService authService, PasswordResetService passwordResetService) {
+    public AuthController(
+            AuthService authService,
+            PasswordResetService passwordResetService,
+            FirmInvitationService firmInvitationService
+    ) {
         this.authService = authService;
         this.passwordResetService = passwordResetService;
+        this.firmInvitationService = firmInvitationService;
     }
 
     @PostMapping("/signup")
@@ -80,8 +87,7 @@ public class AuthController {
             @ApiResponse(responseCode = "200", description = "All sessions revoked"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid access token")
     })
-    public void logoutAll(@AuthenticationPrincipal Jwt jwt) {
-        UUID userId = UUID.fromString(jwt.getSubject());
+    public void logoutAll(@CurrentUserId UUID userId) {
         authService.logoutAll(userId);
     }
 
@@ -109,14 +115,41 @@ public class AuthController {
         passwordResetService.resetPassword(AuthWebMapper.toCompletePasswordResetSpec(request));
     }
 
+    @GetMapping("/invitations/{token}")
+    @Operation(summary = "Preview firm invitation from email link")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Invitation preview returned"),
+            @ApiResponse(responseCode = "401", description = "Invalid or expired invitation token")
+    })
+    public InvitationPreviewResponse previewInvitation(@PathVariable String token) {
+        return AuthWebMapper.toInvitationPreviewResponse(firmInvitationService.previewInvitation(token));
+    }
+
+    @PostMapping("/accept-invitation")
+    @Operation(summary = "Accept firm invitation (new account or logged-in user)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Invitation accepted, tokens issued"),
+            @ApiResponse(responseCode = "400", description = "Validation error"),
+            @ApiResponse(responseCode = "401", description = "Login required or invalid token"),
+            @ApiResponse(responseCode = "403", description = "Logged-in user does not match invitation email"),
+            @ApiResponse(responseCode = "409", description = "Already a firm member")
+    })
+    public AuthResponse acceptInvitation(
+            @CurrentUserId(required = false) UUID userId,
+            @Valid @RequestBody AcceptInvitationRequest request
+    ) {
+        return AuthWebMapper.toAuthResponse(
+                firmInvitationService.acceptInvitation(AuthWebMapper.toAcceptInvitationSpec(request), userId)
+        );
+    }
+
     @GetMapping("/me")
     @Operation(summary = "Get current authenticated user", security = @SecurityRequirement(name = "bearerAuth"))
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Current user returned"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid access token")
     })
-    public MeResponse me(@AuthenticationPrincipal Jwt jwt) {
-        UUID userId = UUID.fromString(jwt.getSubject());
+    public MeResponse me(@CurrentUserId UUID userId) {
         return AuthWebMapper.toMeResponse(authService.getMe(userId));
     }
 }

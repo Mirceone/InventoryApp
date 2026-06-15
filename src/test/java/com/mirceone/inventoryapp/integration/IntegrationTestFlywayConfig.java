@@ -6,9 +6,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 
 /**
- * La fiecare pornire a contextului Spring cu profilul {@code test}, schema este
- * curatata cu Flyway {@code clean()} si reaplicate migrarile — echivalent cu o baza
- * proaspat creata cu aceleasi scripturi ca in productie.
+ * La fiecare pornire a contextului Spring cu profilul {@code test}, schema izolata a
+ * rularii curente este curatata cu Flyway {@code clean()} si reaplicate migrarile —
+ * echivalent cu o baza proaspat creata, fara sa afecteze alte scheme folosite de alte
+ * rulari locale/CI pe aceeasi baza PostgreSQL.
  */
 @Configuration
 @Profile("test")

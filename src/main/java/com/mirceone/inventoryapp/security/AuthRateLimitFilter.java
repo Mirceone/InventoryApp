@@ -22,15 +22,20 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     private static final String REFRESH_PATH = "/auth/refresh";
     private static final String FORGOT_PASSWORD_PATH = "/auth/forgot-password";
     private static final String RESET_PASSWORD_PATH = "/auth/reset-password";
+    private static final String ACCEPT_INVITATION_PATH = "/auth/accept-invitation";
 
     private final AuthRateLimiter authRateLimiter;
+    private final boolean trustForwardedFor;
     private final ObjectMapper objectMapper;
 
     public AuthRateLimitFilter(
             @Qualifier("authRateLimiter") AuthRateLimiter authRateLimiter,
+            @org.springframework.beans.factory.annotation.Value("${app.security.rate-limit.trust-forwarded-for:false}")
+            boolean trustForwardedFor,
             ObjectMapper objectMapper
     ) {
         this.authRateLimiter = authRateLimiter;
+        this.trustForwardedFor = trustForwardedFor;
         this.objectMapper = objectMapper;
     }
 
@@ -38,7 +43,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         if (isAuthRateLimitedEndpoint(request)) {
-            String key = request.getRemoteAddr() + "|" + request.getRequestURI();
+            String key = ClientIpResolver.resolve(request, trustForwardedFor) + "|" + request.getRequestURI();
             if (!authRateLimiter.allow(key)) {
                 writeTooManyRequestsResponse(request, response);
                 return;
@@ -55,7 +60,8 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         return LOGIN_PATH.equals(uri)
                 || REFRESH_PATH.equals(uri)
                 || FORGOT_PASSWORD_PATH.equals(uri)
-                || RESET_PASSWORD_PATH.equals(uri);
+                || RESET_PASSWORD_PATH.equals(uri)
+                || ACCEPT_INVITATION_PATH.equals(uri);
     }
 
     private void writeTooManyRequestsResponse(HttpServletRequest request, HttpServletResponse response) throws IOException {

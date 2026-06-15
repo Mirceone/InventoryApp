@@ -43,4 +43,20 @@ public class OpsEventEntity {
     public UUID getId() {
         return id;
     }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    public String getPromptExcerpt() {
+        return promptExcerpt;
+    }
+
+    public String getResponseExcerpt() {
+        return responseExcerpt;
+    }
+
+    public String getModel() {
+        return model;
+    }
 }
