@@ -5,28 +5,18 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.List;
 
 /**
- * Raw shape of the JSON the LLM is asked to return. Numeric fields are kept as String so a
- * locale-formatted or currency-decorated value from the model does not fail the whole parse;
- * {@link InvoiceValueParser} converts them leniently.
+ * Product-shaped JSON the VLM is asked to return from an invoice image: only the fields needed to
+ * create products. Quantity is kept as String so a locale-formatted value does not fail the parse
+ * ({@link InvoiceValueParser} converts it leniently).
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ExtractedInvoiceJson(
-        String supplier,
-        String invoiceNumber,
-        String invoiceDate,
-        String currency,
-        String total,
-        List<Line> lineItems
-) {
+public record ExtractedInvoiceJson(List<Product> products) {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Line(
-            String description,
+    public record Product(
+            String name,
             String sku,
-            String quantity,
-            String unit,
-            String unitPrice,
-            String lineTotal
+            String quantity
     ) {
     }
 }

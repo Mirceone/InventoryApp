@@ -2,6 +2,7 @@ package com.mirceone.inventoryapp.service.workorders;
 
 import com.mirceone.inventoryapp.config.AppIntegrationProperties;
 import com.mirceone.inventoryapp.model.InvoiceExtractionEntity;
+import com.mirceone.inventoryapp.model.InvoiceExtractionStatus;
 import com.mirceone.inventoryapp.model.InvoiceLineItemEntity;
 import com.mirceone.inventoryapp.model.InvoiceProcessingStatus;
 import com.mirceone.inventoryapp.model.UserEntity;
@@ -14,7 +15,7 @@ import com.mirceone.inventoryapp.service.firms.access.FirmAccessService;
 import com.mirceone.inventoryapp.service.firms.access.FirmPermission;
 import com.mirceone.inventoryapp.service.storage.BlobStorage;
 import com.mirceone.inventoryapp.service.support.AfterCommitExecutor;
-import com.mirceone.inventoryapp.service.workorders.invoices.InvoiceProcessingService;
+import com.mirceone.inventoryapp.service.workorders.invoices.extraction.InvoiceStructuringService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -53,7 +54,7 @@ public class WorkOrderInvoiceService {
     private final UserRepository userRepository;
     private final BlobStorage blobStorage;
     private final AfterCommitExecutor afterCommitExecutor;
-    private final InvoiceProcessingService processingService;
+    private final InvoiceStructuringService structuringService;
     private final InvoiceExtractionRepository extractionRepository;
     private final InvoiceLineItemRepository lineItemRepository;
 
@@ -65,7 +66,7 @@ public class WorkOrderInvoiceService {
             UserRepository userRepository,
             BlobStorage blobStorage,
             AfterCommitExecutor afterCommitExecutor,
-            InvoiceProcessingService processingService,
+            InvoiceStructuringService structuringService,
             InvoiceExtractionRepository extractionRepository,
             InvoiceLineItemRepository lineItemRepository
     ) {
@@ -76,7 +77,7 @@ public class WorkOrderInvoiceService {
         this.userRepository = userRepository;
         this.blobStorage = blobStorage;
         this.afterCommitExecutor = afterCommitExecutor;
-        this.processingService = processingService;
+        this.structuringService = structuringService;
         this.extractionRepository = extractionRepository;
         this.lineItemRepository = lineItemRepository;
     }
@@ -166,36 +167,29 @@ public class WorkOrderInvoiceService {
         WorkOrderInvoiceEntity invoice = requireInvoice(firmId, workOrderId, invoiceId);
         InvoiceExtractionEntity extraction = extractionRepository.findByInvoiceId(invoice.getId())
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "No structured extraction for this invoice"));
-        List<ExtractionDetail.Line> lines = lineItemRepository
+        List<ExtractionDetail.Product> products = lineItemRepository
                 .findByExtractionIdOrderByLineNoAsc(extraction.getId())
                 .stream()
-                .map(WorkOrderInvoiceService::toLine)
+                .map(WorkOrderInvoiceService::toProduct)
                 .toList();
         return new ExtractionDetail(
                 extraction.getId(),
                 extraction.getInvoiceId(),
                 extraction.getStatus(),
-                extraction.getSupplierName(),
-                extraction.getInvoiceNumber(),
-                extraction.getInvoiceDate(),
-                extraction.getCurrency(),
-                extraction.getTotalAmount(),
                 extraction.getError(),
                 extraction.getExtractedAt(),
-                lines
+                extraction.getRawJson(),
+                products
         );
     }
 
-    private static ExtractionDetail.Line toLine(InvoiceLineItemEntity entity) {
-        return new ExtractionDetail.Line(
+    private static ExtractionDetail.Product toProduct(InvoiceLineItemEntity entity) {
+        return new ExtractionDetail.Product(
                 entity.getId(),
                 entity.getLineNo(),
-                entity.getRawDescription(),
+                entity.getName(),
                 entity.getSku(),
-                entity.getQuantity(),
-                entity.getUnit(),
-                entity.getUnitPrice(),
-                entity.getLineTotal()
+                entity.getQuantity()
         );
     }
 
@@ -235,9 +229,30 @@ public class WorkOrderInvoiceService {
         invoice.setProcessingError(null);
         invoice.setProcessedAt(null);
         WorkOrderInvoiceEntity saved = invoiceRepository.saveAndFlush(invoice);
-        UUID savedId = saved.getId();
-        afterCommitExecutor.execute(() -> processingService.processAsync(savedId));
+        enqueueExtraction(saved);
         return toDetailSummary(saved);
+    }
+
+    /**
+     * Creates (or resets to PENDING) the invoice's extraction row and schedules it for async VLM
+     * extraction. Best-effort: a failure here must not fail the upload that already succeeded.
+     */
+    private void enqueueExtraction(WorkOrderInvoiceEntity invoice) {
+        if (!props.getFeatures().isInvoiceExtractionEnabled()) {
+            return;
+        }
+        try {
+            InvoiceExtractionEntity extraction = extractionRepository.findByInvoiceId(invoice.getId())
+                    .orElseGet(() -> new InvoiceExtractionEntity(
+                            UUID.randomUUID(), invoice.getId(), invoice.getFirmId(), invoice.getWorkOrderId()));
+            extraction.setStatus(InvoiceExtractionStatus.PENDING);
+            extraction.setError(null);
+            extractionRepository.save(extraction);
+            UUID extractionId = extraction.getId();
+            afterCommitExecutor.execute(() -> structuringService.processAsync(extractionId));
+        } catch (Exception e) {
+            log.warn("Failed to enqueue invoice extraction for invoice={}: {}", invoice.getId(), e.getMessage());
+        }
     }
 
     private WorkOrderInvoiceEntity persistUpload(UUID userId, UUID firmId, UUID workOrderId, MultipartFile file) {
@@ -299,8 +314,7 @@ public class WorkOrderInvoiceService {
                     checksum,
                     storageKey
             ));
-            UUID savedId = saved.getId();
-            afterCommitExecutor.execute(() -> processingService.processAsync(savedId));
+            enqueueExtraction(saved);
             return saved;
         } catch (RuntimeException e) {
             deleteBlobQuietly(storageKey);

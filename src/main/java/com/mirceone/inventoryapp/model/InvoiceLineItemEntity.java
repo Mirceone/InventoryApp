@@ -7,8 +7,9 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * One extracted line item from an invoice. Matching against firm products and applying to
- * inventory are deferred to later phases; this entity is the raw structured extraction.
+ * A product candidate extracted from an invoice: just the fields needed to create/update a
+ * {@link ProductEntity} (name, optional SKU, quantity). Matching and applying to inventory are
+ * handled by later phases.
  */
 @Entity
 @Table(name = "invoice_line_items")
@@ -26,23 +27,14 @@ public class InvoiceLineItemEntity {
     @Column(name = "line_no", nullable = false)
     private int lineNo;
 
-    @Column(name = "raw_description", nullable = false, columnDefinition = "text")
-    private String rawDescription;
+    @Column(name = "name", nullable = false, columnDefinition = "text")
+    private String name;
 
     @Column(name = "sku", length = 128)
     private String sku;
 
     @Column(name = "quantity", precision = 18, scale = 3)
     private BigDecimal quantity;
-
-    @Column(name = "unit", length = 32)
-    private String unit;
-
-    @Column(name = "unit_price", precision = 18, scale = 2)
-    private BigDecimal unitPrice;
-
-    @Column(name = "line_total", precision = 18, scale = 2)
-    private BigDecimal lineTotal;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -55,23 +47,17 @@ public class InvoiceLineItemEntity {
             UUID extractionId,
             UUID firmId,
             int lineNo,
-            String rawDescription,
+            String name,
             String sku,
-            BigDecimal quantity,
-            String unit,
-            BigDecimal unitPrice,
-            BigDecimal lineTotal
+            BigDecimal quantity
     ) {
         this.id = id;
         this.extractionId = extractionId;
         this.firmId = firmId;
         this.lineNo = lineNo;
-        this.rawDescription = rawDescription;
+        this.name = name;
         this.sku = sku;
         this.quantity = quantity;
-        this.unit = unit;
-        this.unitPrice = unitPrice;
-        this.lineTotal = lineTotal;
     }
 
     @PrePersist
@@ -97,8 +83,8 @@ public class InvoiceLineItemEntity {
         return lineNo;
     }
 
-    public String getRawDescription() {
-        return rawDescription;
+    public String getName() {
+        return name;
     }
 
     public String getSku() {
@@ -107,17 +93,5 @@ public class InvoiceLineItemEntity {
 
     public BigDecimal getQuantity() {
         return quantity;
-    }
-
-    public String getUnit() {
-        return unit;
-    }
-
-    public BigDecimal getUnitPrice() {
-        return unitPrice;
-    }
-
-    public BigDecimal getLineTotal() {
-        return lineTotal;
     }
 }

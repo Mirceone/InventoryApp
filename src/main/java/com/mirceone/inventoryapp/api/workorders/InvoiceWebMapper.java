@@ -13,23 +13,18 @@ public final class InvoiceWebMapper {
     }
 
     public static InvoiceExtractionResponse toExtractionResponse(ExtractionDetail detail) {
-        List<InvoiceExtractionResponse.LineItem> lines = detail.lineItems().stream()
-                .map(l -> new InvoiceExtractionResponse.LineItem(
-                        l.id(), l.lineNo(), l.rawDescription(), l.sku(),
-                        l.quantity(), l.unit(), l.unitPrice(), l.lineTotal()))
+        List<InvoiceExtractionResponse.Product> products = detail.products().stream()
+                .map(p -> new InvoiceExtractionResponse.Product(
+                        p.id(), p.lineNo(), p.name(), p.sku(), p.quantity()))
                 .toList();
         return new InvoiceExtractionResponse(
                 detail.id(),
                 detail.invoiceId(),
                 detail.status(),
-                detail.supplierName(),
-                detail.invoiceNumber(),
-                detail.invoiceDate(),
-                detail.currency(),
-                detail.totalAmount(),
                 detail.error(),
                 detail.extractedAt(),
-                lines
+                detail.rawJson(),
+                products
         );
     }
 

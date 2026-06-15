@@ -4,7 +4,6 @@ import com.mirceone.inventoryapp.model.InvoiceExtractionStatus;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -12,25 +11,18 @@ public record InvoiceExtractionResponse(
         UUID id,
         UUID invoiceId,
         InvoiceExtractionStatus status,
-        String supplierName,
-        String invoiceNumber,
-        LocalDate invoiceDate,
-        String currency,
-        BigDecimal totalAmount,
         String error,
         Instant extractedAt,
-        List<LineItem> lineItems
+        String rawJson,
+        List<Product> products
 ) {
 
-    public record LineItem(
+    public record Product(
             UUID id,
             int lineNo,
-            String rawDescription,
+            String name,
             String sku,
-            BigDecimal quantity,
-            String unit,
-            BigDecimal unitPrice,
-            BigDecimal lineTotal
+            BigDecimal quantity
     ) {
     }
 }

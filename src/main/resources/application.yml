@@ -101,6 +101,20 @@ app:
     ensure-model-script-path: ${APP_AI_ENSURE_MODEL_SCRIPT_PATH:}
     timeout: ${APP_AI_TIMEOUT:120s}
     max-retries: ${APP_AI_MAX_RETRIES:2}
+    # Max simultaneous inference calls against the local model. Keep at 1 for a single GPU:
+    # concurrent requests exhaust VRAM and crash the MLX server (Metal OOM).
+    max-concurrent-requests: ${APP_AI_MAX_CONCURRENT_REQUESTS:1}
+    # Local AI slot — the on-device backend used for sensitive document processing (invoices).
+    # MUST stay on-device (mlx|stub); a cloud value here fails startup. Blank => uses app.ai.provider.
+    local:
+      provider: ${APP_AI_LOCAL_PROVIDER:}
+    # General AI slot — non-sensitive functions only. May optionally use a cloud model.
+    # provider: mlx (reuse local on-device) | claude | openai
+    general:
+      provider: ${APP_AI_GENERAL_PROVIDER:mlx}
+      claude:
+        model: ${APP_AI_GENERAL_CLAUDE_MODEL:claude-sonnet-4-6}
+        api-key: ${ANTHROPIC_API_KEY:}
 
   files:
     classification-poll-interval: ${APP_FILES_CLASSIFICATION_POLL_INTERVAL:2s}
@@ -118,17 +132,10 @@ app:
     allowed-mime-prefixes:
       - application/pdf
       - image/
-    processing-poll-interval: ${APP_INVOICES_PROCESSING_POLL_INTERVAL:2s}
-    processing-batch-size: ${APP_INVOICES_PROCESSING_BATCH_SIZE:5}
     structuring-poll-interval: ${APP_INVOICES_STRUCTURING_POLL_INTERVAL:3s}
     structuring-batch-size: ${APP_INVOICES_STRUCTURING_BATCH_SIZE:5}
-    # Full path if not on PATH, e.g. ${user.dir}/.venv-markitdown/bin/markitdown or python3 -m markitdown
-    markitdown-command: ${APP_INVOICES_MARKITDOWN_COMMAND:markitdown}
-    markitdown-timeout: ${APP_INVOICES_MARKITDOWN_TIMEOUT:120s}
-    extractor: ${APP_INVOICES_EXTRACTOR:markitdown}
-    # VLM fallback for scanned PDFs / image invoices (replaces the former OCR path):
-    # MarkItDown is used for PDFs with a real text layer; otherwise pages are rasterized and
-    # sent to the local vision model.
+    # Invoice extraction reads the document with the vision model directly: PDF pages are
+    # rasterized (capped + DPI below) and sent to the VLM, which returns product-shaped JSON.
     vlm-max-pages: ${APP_INVOICES_VLM_MAX_PAGES:8}
     vlm-render-dpi: ${APP_INVOICES_VLM_RENDER_DPI:200}
 

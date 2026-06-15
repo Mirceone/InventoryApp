@@ -11,7 +11,9 @@ import com.openai.models.chat.completions.ChatCompletionMessageParam;
 import com.openai.models.chat.completions.ChatCompletionSystemMessageParam;
 import com.openai.models.chat.completions.ChatCompletionUserMessageParam;
 import com.openai.models.chat.completions.ChatCompletionCreateParams.ResponseFormat;
+import com.mirceone.inventoryapp.config.AppIntegrationProperties;
 import com.openai.models.ResponseFormatJsonObject;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
@@ -19,18 +21,31 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.Semaphore;
 
 @Service
 @Primary
+@Qualifier("localAi")
 @ConditionalOnProperty(name = "app.ai.provider", havingValue = "mlx", matchIfMissing = true)
 public class OpenAiSdkAiService implements AiService {
 
     private final OpenAIClient client;
     private final AiModelIdResolver modelIdResolver;
+    /**
+     * Serializes inference against the local model. A single GPU can only run a few requests at
+     * once before exhausting VRAM (Metal OOM crashes the MLX server), so concurrent classification
+     * and invoice-structuring calls must queue rather than run in parallel. Default 1.
+     */
+    private final Semaphore inferenceGate;
 
-    public OpenAiSdkAiService(OpenAIClient client, AiModelIdResolver modelIdResolver) {
+    public OpenAiSdkAiService(
+            OpenAIClient client,
+            AiModelIdResolver modelIdResolver,
+            AppIntegrationProperties props
+    ) {
         this.client = client;
         this.modelIdResolver = modelIdResolver;
+        this.inferenceGate = new Semaphore(Math.max(1, props.getAi().getMaxConcurrentRequests()));
     }
 
     @Override
@@ -39,17 +54,18 @@ public class OpenAiSdkAiService implements AiService {
                 .model(modelIdResolver.resolvedModelId())
                 .messages(toSdkMessages(messages))
                 .build();
-        return extractContent(client.chat().completions().create(params));
+        return extractContent(createGated(params));
     }
 
     @Override
     public String chatJson(String userPrompt) {
         ChatCompletionCreateParams params = ChatCompletionCreateParams.builder()
                 .model(modelIdResolver.resolvedModelId())
+                .temperature(0.0)
                 .addMessage(ChatCompletionUserMessageParam.builder().content(userPrompt).build())
                 .responseFormat(ResponseFormat.ofJsonObject(ResponseFormatJsonObject.builder().build()))
                 .build();
-        return extractContent(client.chat().completions().create(params));
+        return extractContent(createGated(params));
     }
 
     @Override
@@ -67,11 +83,22 @@ public class OpenAiSdkAiService implements AiService {
         }
         ChatCompletionCreateParams params = ChatCompletionCreateParams.builder()
                 .model(modelIdResolver.resolvedModelId())
+                .temperature(0.0)
                 .addMessage(ChatCompletionUserMessageParam.builder()
                         .contentOfArrayOfContentParts(parts)
                         .build())
                 .build();
-        return extractContent(client.chat().completions().create(params));
+        return extractContent(createGated(params));
+    }
+
+    /** Runs the model call holding a single inference permit so concurrent calls queue. */
+    private ChatCompletion createGated(ChatCompletionCreateParams params) {
+        inferenceGate.acquireUninterruptibly();
+        try {
+            return client.chat().completions().create(params);
+        } finally {
+            inferenceGate.release();
+        }
     }
 
     private static String toDataUrl(AiImage image) {

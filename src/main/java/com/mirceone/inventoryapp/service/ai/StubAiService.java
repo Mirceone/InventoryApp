@@ -1,5 +1,6 @@
 package com.mirceone.inventoryapp.service.ai;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
@@ -10,6 +11,7 @@ import java.util.regex.Pattern;
 
 @Service
 @Primary
+@Qualifier("localAi")
 @ConditionalOnProperty(name = "app.ai.provider", havingValue = "stub")
 public class StubAiService implements AiService {
 
@@ -34,12 +36,8 @@ public class StubAiService implements AiService {
             }
             return "{\"folder\":\"" + folder.replace("\"", "\\\"") + "\"}";
         }
-        if (userPrompt != null && userPrompt.contains("Extract the structured data from this invoice")) {
-            return """
-                    {"supplier":"Stub Supplier SRL","invoiceNumber":"STUB-001",\
-                    "invoiceDate":"2026-01-01","currency":"RON","total":100.00,\
-                    "lineItems":[{"description":"Stub Product","sku":"STUB-SKU",\
-                    "quantity":2,"unit":"buc","unitPrice":50.00,"lineTotal":100.00}]}""";
+        if (userPrompt != null && userPrompt.contains("Extract products from this invoice")) {
+            return "{\"products\":[{\"name\":\"Stub Product\",\"sku\":\"STUB-SKU\",\"quantity\":2}]}";
         }
         String safe = userPrompt == null ? "" : userPrompt.replace("\"", "\\\"");
         return "{\"stub\":true,\"prompt\":\"" + safe + "\"}";
@@ -47,7 +45,7 @@ public class StubAiService implements AiService {
 
     @Override
     public String chatVision(String prompt, List<AiImage> images) {
-        int count = images == null ? 0 : images.size();
-        return "# Invoice (scanned via VLM stub)\n\n- pages: " + count + "\n";
+        // chatVision is used for invoice extraction → return deterministic product JSON.
+        return "{\"products\":[{\"name\":\"Stub Product\",\"sku\":\"STUB-SKU\",\"quantity\":2}]}";
     }
 }

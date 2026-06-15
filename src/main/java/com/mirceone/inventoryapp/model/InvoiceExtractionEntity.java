@@ -2,14 +2,12 @@ package com.mirceone.inventoryapp.model;
 
 import jakarta.persistence.*;
 
-import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.UUID;
 
 /**
- * Header of the structured data extracted from one invoice's markdown.
- * One row per {@link WorkOrderInvoiceEntity}; line items live in {@link InvoiceLineItemEntity}.
+ * One structured extraction per {@link WorkOrderInvoiceEntity}: status, the raw JSON the VLM
+ * returned, and (in {@link InvoiceLineItemEntity}) the product candidates ready for inventory.
  */
 @Entity
 @Table(name = "invoice_extractions")
@@ -31,20 +29,8 @@ public class InvoiceExtractionEntity {
     @Column(name = "status", nullable = false, length = 16)
     private InvoiceExtractionStatus status = InvoiceExtractionStatus.PENDING;
 
-    @Column(name = "supplier_name", length = 512)
-    private String supplierName;
-
-    @Column(name = "invoice_number", length = 128)
-    private String invoiceNumber;
-
-    @Column(name = "invoice_date")
-    private LocalDate invoiceDate;
-
-    @Column(name = "currency", length = 8)
-    private String currency;
-
-    @Column(name = "total_amount", precision = 18, scale = 2)
-    private BigDecimal totalAmount;
+    @Column(name = "raw_json", columnDefinition = "text")
+    private String rawJson;
 
     @Column(name = "model", length = 255)
     private String model;
@@ -100,44 +86,12 @@ public class InvoiceExtractionEntity {
         this.status = status;
     }
 
-    public String getSupplierName() {
-        return supplierName;
+    public String getRawJson() {
+        return rawJson;
     }
 
-    public void setSupplierName(String supplierName) {
-        this.supplierName = supplierName;
-    }
-
-    public String getInvoiceNumber() {
-        return invoiceNumber;
-    }
-
-    public void setInvoiceNumber(String invoiceNumber) {
-        this.invoiceNumber = invoiceNumber;
-    }
-
-    public LocalDate getInvoiceDate() {
-        return invoiceDate;
-    }
-
-    public void setInvoiceDate(LocalDate invoiceDate) {
-        this.invoiceDate = invoiceDate;
-    }
-
-    public String getCurrency() {
-        return currency;
-    }
-
-    public void setCurrency(String currency) {
-        this.currency = currency;
-    }
-
-    public BigDecimal getTotalAmount() {
-        return totalAmount;
-    }
-
-    public void setTotalAmount(BigDecimal totalAmount) {
-        this.totalAmount = totalAmount;
+    public void setRawJson(String rawJson) {
+        this.rawJson = rawJson;
     }
 
     public String getModel() {

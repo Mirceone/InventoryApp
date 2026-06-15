@@ -187,14 +187,9 @@ public class AppIntegrationProperties {
                 "application/pdf",
                 "image/"
         ));
-        private Duration processingPollInterval = Duration.ofSeconds(2);
-        private int processingBatchSize = 5;
         private Duration structuringPollInterval = Duration.ofSeconds(3);
         private int structuringBatchSize = 5;
-        private String markitdownCommand = "markitdown";
-        private Duration markitdownTimeout = Duration.ofSeconds(120);
-        private String extractor = "markitdown";
-        // VLM fallback for scanned PDFs / image invoices (replaces the former OCR path).
+        // VLM extraction: invoices are rasterized and read by the vision model directly.
         private int vlmMaxPages = 8;
         private int vlmRenderDpi = 200;
 
@@ -246,46 +241,6 @@ public class AppIntegrationProperties {
             this.structuringBatchSize = structuringBatchSize;
         }
 
-        public Duration getProcessingPollInterval() {
-            return processingPollInterval;
-        }
-
-        public void setProcessingPollInterval(Duration processingPollInterval) {
-            this.processingPollInterval = processingPollInterval;
-        }
-
-        public int getProcessingBatchSize() {
-            return processingBatchSize;
-        }
-
-        public void setProcessingBatchSize(int processingBatchSize) {
-            this.processingBatchSize = processingBatchSize;
-        }
-
-        public String getMarkitdownCommand() {
-            return markitdownCommand;
-        }
-
-        public void setMarkitdownCommand(String markitdownCommand) {
-            this.markitdownCommand = markitdownCommand;
-        }
-
-        public Duration getMarkitdownTimeout() {
-            return markitdownTimeout;
-        }
-
-        public void setMarkitdownTimeout(Duration markitdownTimeout) {
-            this.markitdownTimeout = markitdownTimeout;
-        }
-
-        public String getExtractor() {
-            return extractor;
-        }
-
-        public void setExtractor(String extractor) {
-            this.extractor = extractor;
-        }
-
         public int getVlmMaxPages() {
             return vlmMaxPages;
         }
@@ -319,6 +274,9 @@ public class AppIntegrationProperties {
         private String ensureModelScriptPath = "";
         private Duration timeout = Duration.ofSeconds(120);
         private int maxRetries = 2;
+        private int maxConcurrentRequests = 1;
+        private final Local local = new Local();
+        private final General general = new General();
 
         public String getProvider() {
             return provider;
@@ -438,6 +396,83 @@ public class AppIntegrationProperties {
 
         public void setMaxRetries(int maxRetries) {
             this.maxRetries = maxRetries;
+        }
+
+        public int getMaxConcurrentRequests() {
+            return maxConcurrentRequests;
+        }
+
+        public void setMaxConcurrentRequests(int maxConcurrentRequests) {
+            this.maxConcurrentRequests = maxConcurrentRequests;
+        }
+
+        public Local getLocal() {
+            return local;
+        }
+
+        public General getGeneral() {
+            return general;
+        }
+
+        /**
+         * Configuration for the "local" AI slot — the on-device backend used for sensitive
+         * document processing (invoices). It must never be a cloud provider; this is enforced
+         * at startup by {@code LocalAiSlotValidator}. When {@code provider} is blank the
+         * effective local provider falls back to the top-level {@code app.ai.provider}.
+         */
+        public static class Local {
+            private String provider = "";
+
+            public String getProvider() {
+                return provider;
+            }
+
+            public void setProvider(String provider) {
+                this.provider = provider;
+            }
+        }
+
+        /**
+         * Configuration for the "general" AI slot — used for non-sensitive functions, which may
+         * optionally run against a more capable cloud model. {@code provider} is one of
+         * {@code mlx} (reuse the local on-device backend), {@code claude}, or {@code openai}.
+         */
+        public static class General {
+            private String provider = "mlx";
+            private final Claude claude = new Claude();
+
+            public String getProvider() {
+                return provider;
+            }
+
+            public void setProvider(String provider) {
+                this.provider = provider;
+            }
+
+            public Claude getClaude() {
+                return claude;
+            }
+
+            public static class Claude {
+                private String model = "claude-sonnet-4-6";
+                private String apiKey = "";
+
+                public String getModel() {
+                    return model;
+                }
+
+                public void setModel(String model) {
+                    this.model = model;
+                }
+
+                public String getApiKey() {
+                    return apiKey;
+                }
+
+                public void setApiKey(String apiKey) {
+                    this.apiKey = apiKey;
+                }
+            }
         }
     }
 

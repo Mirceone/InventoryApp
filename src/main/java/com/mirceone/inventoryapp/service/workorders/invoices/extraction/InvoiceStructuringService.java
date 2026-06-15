@@ -5,47 +5,73 @@ import com.mirceone.inventoryapp.config.AppIntegrationProperties;
 import com.mirceone.inventoryapp.model.InvoiceExtractionEntity;
 import com.mirceone.inventoryapp.model.InvoiceExtractionStatus;
 import com.mirceone.inventoryapp.model.InvoiceLineItemEntity;
+import com.mirceone.inventoryapp.model.InvoiceProcessingStatus;
 import com.mirceone.inventoryapp.model.WorkOrderInvoiceEntity;
 import com.mirceone.inventoryapp.repository.InvoiceExtractionRepository;
 import com.mirceone.inventoryapp.repository.InvoiceLineItemRepository;
 import com.mirceone.inventoryapp.repository.WorkOrderInvoiceRepository;
+import com.mirceone.inventoryapp.service.ai.AiImage;
 import com.mirceone.inventoryapp.service.ai.AiModelIdResolver;
 import com.mirceone.inventoryapp.service.ai.AiService;
+import com.mirceone.inventoryapp.service.storage.BlobStorage;
+import com.mirceone.inventoryapp.service.workorders.invoices.InvoicePdfTextExtractor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.core.io.Resource;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 /**
- * Turns an invoice's extracted markdown into structured line items via the local LLM
- * ({@link AiService#chatJson}). Phase 1 of invoice-driven inventory: extraction only — matching
- * against firm products and applying to inventory are handled by later phases.
+ * Extracts product candidates from an invoice into structured JSON.
  *
- * <p>Mirrors the existing async pipeline: a PENDING {@link InvoiceExtractionEntity} row is created
- * when an invoice becomes READY, then processed here via FOR UPDATE SKIP LOCKED so the per-invoice
- * trigger and the scheduled poller never double-process.
+ * <p>Text PDFs (the common case) are read with PDFBox and sent to the LLM as text — accurate and
+ * cheap. Image uploads fall back to the vision model. Either way the model returns product-shaped
+ * JSON which is parsed and persisted. Calls are serialized by the AI inference gate.
  */
 @Service
 public class InvoiceStructuringService {
 
     private static final Logger log = LoggerFactory.getLogger(InvoiceStructuringService.class);
 
-    /** Cap the markdown fed to the model so a huge document cannot blow the context window. */
-    private static final int MAX_MARKDOWN_CHARS = 24_000;
-    /** Marker the stub AI keys on; also makes the intent explicit to the model. */
-    static final String PROMPT_MARKER = "Extract the structured data from this invoice";
+    private static final int MAX_TEXT_CHARS = 24_000;
+
+    /** Marker the stub keys on; also states the task to the model. */
+    static final String TEXT_PROMPT_HEADER = """
+            You are an invoice parser. Extract all line items and return ONLY a JSON object,
+            with no explanation outside the JSON.
+            Extract products from this invoice.
+            Return exactly: {"products":[{"name":"...","sku":null,"quantity":1.0}]}
+            Quantities must be numbers (not strings). SKU is null if not present.
+
+            Invoice text:
+            """;
+
+    private static final String VISION_PROMPT = """
+            Read this invoice image and extract the products to add to inventory.
+            Reply with JSON only, no prose and no markdown fences.
+            Schema: {"products":[{"name": string, "sku": string|null, "quantity": number}]}
+            Include one entry per distinct product line. Do not invent products.""";
 
     private final InvoiceExtractionRepository extractionRepository;
     private final InvoiceLineItemRepository lineItemRepository;
     private final WorkOrderInvoiceRepository invoiceRepository;
+    private final BlobStorage blobStorage;
+    private final InvoicePdfTextExtractor pdfTextExtractor;
     private final AiService aiService;
     private final ObjectProvider<AiModelIdResolver> modelIdResolver;
     private final AppIntegrationProperties props;
@@ -57,7 +83,9 @@ public class InvoiceStructuringService {
             InvoiceExtractionRepository extractionRepository,
             InvoiceLineItemRepository lineItemRepository,
             WorkOrderInvoiceRepository invoiceRepository,
-            AiService aiService,
+            BlobStorage blobStorage,
+            InvoicePdfTextExtractor pdfTextExtractor,
+            @Qualifier("localAi") AiService aiService,
             ObjectProvider<AiModelIdResolver> modelIdResolver,
             AppIntegrationProperties props,
             ObjectMapper objectMapper,
@@ -66,6 +94,8 @@ public class InvoiceStructuringService {
         this.extractionRepository = extractionRepository;
         this.lineItemRepository = lineItemRepository;
         this.invoiceRepository = invoiceRepository;
+        this.blobStorage = blobStorage;
+        this.pdfTextExtractor = pdfTextExtractor;
         this.aiService = aiService;
         this.modelIdResolver = modelIdResolver;
         this.props = props;
@@ -76,11 +106,9 @@ public class InvoiceStructuringService {
     @Async
     public void processAsync(UUID extractionId) {
         try {
-            // Through the proxy so @Transactional applies on the async thread (a direct call would
-            // be self-invocation and skip the transaction).
             self.processExtraction(extractionId);
         } catch (Exception e) {
-            log.warn("Async invoice structuring failed id={}: {}", extractionId, e.getMessage());
+            log.warn("Async invoice extraction failed id={}: {}", extractionId, e.getMessage());
         }
     }
 
@@ -93,7 +121,7 @@ public class InvoiceStructuringService {
                 processLocked(extraction);
                 processed++;
             } catch (Exception e) {
-                log.warn("Invoice structuring failed id={}: {}", extraction.getId(), e.getMessage());
+                log.warn("Invoice extraction failed id={}: {}", extraction.getId(), e.getMessage());
             }
         }
         return processed;
@@ -110,80 +138,102 @@ public class InvoiceStructuringService {
 
     private void processLocked(InvoiceExtractionEntity extraction) {
         WorkOrderInvoiceEntity invoice = invoiceRepository.findById(extraction.getInvoiceId()).orElse(null);
-        String markdown = invoice != null ? invoice.getMarkdownText() : null;
-        if (markdown == null || markdown.isBlank()) {
-            markFailed(extraction, "Invoice has no extracted text to structure");
+        if (invoice == null) {
+            markFailed(extraction, null, "Invoice not found for extraction");
             return;
         }
 
+        Path tempFile = null;
         try {
-            String raw = aiService.chatJson(buildPrompt(markdown));
-            ExtractedInvoiceJson parsed = objectMapper.readValue(raw, ExtractedInvoiceJson.class);
-            applyExtraction(extraction, parsed);
+            tempFile = materializeBlob(invoice);
+            String raw = callModel(tempFile, invoice.getMimeType());
+            applyExtraction(extraction, raw);
             extraction.setStatus(InvoiceExtractionStatus.READY);
             extraction.setError(null);
             extraction.setModel(resolveModel());
             extraction.setExtractedAt(Instant.now());
             extractionRepository.save(extraction);
+            mirrorInvoiceStatus(invoice, InvoiceProcessingStatus.READY);
         } catch (Exception e) {
-            // Persist the failure in this transaction without rethrowing (a rethrow would roll the
-            // FAILED write back through the @Transactional boundary).
-            log.warn("Invoice structuring failed id={}: {}", extraction.getId(), e.getMessage());
-            markFailed(extraction, e.getMessage());
+            log.warn("Invoice extraction failed id={}: {}", extraction.getId(), e.getMessage());
+            markFailed(extraction, invoice, e.getMessage());
+        } finally {
+            deleteQuietly(tempFile);
         }
     }
 
-    private void applyExtraction(InvoiceExtractionEntity extraction, ExtractedInvoiceJson parsed) {
-        // Idempotent re-run: clear any previously extracted lines before persisting fresh ones.
-        lineItemRepository.deleteByExtractionId(extraction.getId());
+    /** Text PDFs go through PDFBox + text LLM; image uploads use the vision model. */
+    private String callModel(Path file, String mimeType) throws IOException {
+        if (mimeType != null && mimeType.startsWith("image/")) {
+            AiImage image = new AiImage(mimeType, Files.readAllBytes(file));
+            return aiService.chatVision(VISION_PROMPT, List.of(image));
+        }
+        String text = pdfTextExtractor.extract(file);
+        if (text.length() > MAX_TEXT_CHARS) {
+            text = text.substring(0, MAX_TEXT_CHARS);
+        }
+        return aiService.chatJson(TEXT_PROMPT_HEADER + text);
+    }
 
-        extraction.setSupplierName(InvoiceValueParser.trimToNull(parsed.supplier(), 512));
-        extraction.setInvoiceNumber(InvoiceValueParser.trimToNull(parsed.invoiceNumber(), 128));
-        extraction.setInvoiceDate(InvoiceValueParser.date(parsed.invoiceDate()));
-        extraction.setCurrency(InvoiceValueParser.trimToNull(parsed.currency(), 8));
-        extraction.setTotalAmount(InvoiceValueParser.money(parsed.total()));
+    private void applyExtraction(InvoiceExtractionEntity extraction, String rawResponse) throws IOException {
+        String json = stripToJson(rawResponse);
+        ExtractedInvoiceJson parsed = objectMapper.readValue(json, ExtractedInvoiceJson.class);
 
-        List<ExtractedInvoiceJson.Line> lines = parsed.lineItems() != null ? parsed.lineItems() : List.of();
+        lineItemRepository.deleteByExtractionId(extraction.getId()); // idempotent re-run
+        extraction.setRawJson(truncate(rawResponse, 100_000));
+
+        List<ExtractedInvoiceJson.Product> products = parsed.products() != null ? parsed.products() : List.of();
         List<InvoiceLineItemEntity> rows = new ArrayList<>();
         int lineNo = 1;
-        for (ExtractedInvoiceJson.Line line : lines) {
-            String description = InvoiceValueParser.trimToNull(line.description(), Integer.MAX_VALUE);
-            if (description == null) {
-                continue; // a line with no description carries no inventory signal
+        for (ExtractedInvoiceJson.Product product : products) {
+            String name = InvoiceValueParser.trimToNull(product.name(), 1000);
+            if (name == null) {
+                continue; // no product name → nothing to add to inventory
+            }
+            BigDecimal quantity = InvoiceValueParser.money(product.quantity());
+            if (quantity != null && quantity.signum() <= 0) {
+                quantity = null; // ignore zero/negative quantities rather than fabricating one
             }
             rows.add(new InvoiceLineItemEntity(
                     UUID.randomUUID(),
                     extraction.getId(),
                     extraction.getFirmId(),
                     lineNo++,
-                    description,
-                    InvoiceValueParser.trimToNull(line.sku(), 128),
-                    InvoiceValueParser.money(line.quantity()),
-                    InvoiceValueParser.trimToNull(line.unit(), 32),
-                    InvoiceValueParser.money(line.unitPrice()),
-                    InvoiceValueParser.money(line.lineTotal())
+                    name,
+                    InvoiceValueParser.trimToNull(product.sku(), 128),
+                    quantity
             ));
         }
         lineItemRepository.saveAll(rows);
     }
 
-    private void markFailed(InvoiceExtractionEntity extraction, String message) {
+    private Path materializeBlob(WorkOrderInvoiceEntity invoice) throws IOException {
+        Resource resource = blobStorage.open(invoice.getStorageKey());
+        String suffix = invoice.getExtension() != null && !invoice.getExtension().isBlank()
+                ? "." + invoice.getExtension()
+                : ".bin";
+        Path tempFile = Files.createTempFile("invoice-extract-" + invoice.getId(), suffix);
+        try (InputStream in = resource.getInputStream()) {
+            Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
+        }
+        return tempFile;
+    }
+
+    private void markFailed(InvoiceExtractionEntity extraction, WorkOrderInvoiceEntity invoice, String message) {
         extraction.setStatus(InvoiceExtractionStatus.FAILED);
         extraction.setError(truncate(message, 2000));
         extraction.setModel(resolveModel());
         extraction.setExtractedAt(Instant.now());
         extractionRepository.save(extraction);
+        if (invoice != null) {
+            mirrorInvoiceStatus(invoice, InvoiceProcessingStatus.FAILED);
+        }
     }
 
-    private String buildPrompt(String markdown) {
-        String text = markdown.length() > MAX_MARKDOWN_CHARS ? markdown.substring(0, MAX_MARKDOWN_CHARS) : markdown;
-        return PROMPT_MARKER + ". Reply with JSON only, no prose.\n"
-                + "Schema: {\"supplier\": string|null, \"invoiceNumber\": string|null, "
-                + "\"invoiceDate\": \"YYYY-MM-DD\"|null, \"currency\": string|null, \"total\": number|null, "
-                + "\"lineItems\": [{\"description\": string, \"sku\": string|null, \"quantity\": number|null, "
-                + "\"unit\": string|null, \"unitPrice\": number|null, \"lineTotal\": number|null}]}\n"
-                + "Only include products or services actually listed. Do not invent values; use null when unknown.\n\n"
-                + "Invoice:\n" + text;
+    private void mirrorInvoiceStatus(WorkOrderInvoiceEntity invoice, InvoiceProcessingStatus status) {
+        invoice.setProcessingStatus(status);
+        invoice.setProcessedAt(Instant.now());
+        invoiceRepository.save(invoice);
     }
 
     private String resolveModel() {
@@ -191,10 +241,45 @@ public class InvoiceStructuringService {
         return resolver != null ? resolver.resolvedModelId() : props.getAi().getModel();
     }
 
+    /** Strips markdown code fences / surrounding prose so a tolerant JSON object can be parsed. */
+    static String stripToJson(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String s = raw.strip();
+        if (s.startsWith("```")) {
+            int nl = s.indexOf('\n');
+            if (nl >= 0) {
+                s = s.substring(nl + 1);
+            }
+            if (s.endsWith("```")) {
+                s = s.substring(0, s.length() - 3);
+            }
+            s = s.strip();
+        }
+        int start = s.indexOf('{');
+        int end = s.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            return s.substring(start, end + 1);
+        }
+        return s;
+    }
+
     private static String truncate(String message, int max) {
         if (message == null) {
             return null;
         }
         return message.length() <= max ? message : message.substring(0, max);
+    }
+
+    private static void deleteQuietly(Path path) {
+        if (path == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(path);
+        } catch (IOException ignored) {
+            // best effort
+        }
     }
 }

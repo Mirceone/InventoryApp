@@ -3,19 +3,18 @@ package com.mirceone.inventoryapp.integration;
 import com.mirceone.inventoryapp.model.InvoiceExtractionStatus;
 import com.mirceone.inventoryapp.model.InvoiceProcessingStatus;
 import com.mirceone.inventoryapp.model.UserEntity;
-import com.mirceone.inventoryapp.service.workorders.ExtractionDetail;
-import com.mirceone.inventoryapp.service.workorders.invoices.extraction.InvoiceStructuringService;
 import com.mirceone.inventoryapp.repository.UserRepository;
 import com.mirceone.inventoryapp.service.auth.AuthContracts;
 import com.mirceone.inventoryapp.service.auth.AuthService;
 import com.mirceone.inventoryapp.service.firms.FirmContracts;
 import com.mirceone.inventoryapp.service.firms.FirmService;
+import com.mirceone.inventoryapp.service.workorders.ExtractionDetail;
 import com.mirceone.inventoryapp.service.workorders.InvoiceSummary;
 import com.mirceone.inventoryapp.service.workorders.WorkOrderContracts;
 import com.mirceone.inventoryapp.service.workorders.WorkOrderInvoiceService;
 import com.mirceone.inventoryapp.service.workorders.WorkOrderService;
 import com.mirceone.inventoryapp.service.workorders.WorkOrderSummary;
-import com.mirceone.inventoryapp.service.workorders.invoices.InvoiceProcessingService;
+import com.mirceone.inventoryapp.service.workorders.invoices.extraction.InvoiceStructuringService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -26,7 +25,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
-import java.nio.charset.StandardCharsets;
+import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -49,8 +48,6 @@ class WorkOrderInvoiceIntegrationTest extends IntegrationTestBase {
     @Autowired
     private WorkOrderInvoiceService invoiceService;
     @Autowired
-    private InvoiceProcessingService processingService;
-    @Autowired
     private InvoiceStructuringService structuringService;
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -64,91 +61,71 @@ class WorkOrderInvoiceIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
-    void uploadProcessListAndDeleteInvoiceFlow() throws Exception {
+    void uploadExtractProductsListAndDeleteFlow() throws Exception {
         authService.signup(new AuthContracts.SignupSpec("invoice-it@example.com", "password123", "Invoice IT"));
-        UserEntity user = userRepository.findByEmailIgnoreCase("invoice-it@example.com").orElse(null);
-        assertNotNull(user);
+        UserEntity user = userRepository.findByEmailIgnoreCase("invoice-it@example.com").orElseThrow();
         UUID userId = user.getId();
 
         FirmContracts.FirmSummary firm =
                 firmService.createFirm(userId, new FirmContracts.CreateFirmSpec("Firm Invoices"));
-
-        WorkOrderSummary workOrder = workOrderService.createWorkOrder(
-                userId,
-                firm.id(),
-                new WorkOrderContracts.CreateWorkOrderSpec(
-                        "Renovare",
-                        "Client",
-                        "Bucharest",
-                        null,
-                        LocalDate.now(ZoneOffset.UTC).plusDays(14)
-                )
-        );
-
-        MockMultipartFile pdf = new MockMultipartFile(
-                "file", "factura.pdf", "application/pdf", "%PDF-1.4".getBytes(StandardCharsets.UTF_8));
-
-        InvoiceSummary uploaded = invoiceService.upload(userId, firm.id(), workOrder.id(), pdf);
-        assertEquals(InvoiceProcessingStatus.PENDING, uploaded.processingStatus());
-        assertNull(uploaded.markdownText());
-
-        waitUntilReady(uploaded.id(), firm.id(), workOrder.id(), userId);
-
-        InvoiceSummary ready = invoiceService.getInvoice(userId, firm.id(), workOrder.id(), uploaded.id());
-        assertEquals(InvoiceProcessingStatus.READY, ready.processingStatus());
-        assertNotNull(ready.markdownText());
-        assertTrue(ready.markdownText().contains("Invoice stub"));
-
-        Page<InvoiceSummary> page = invoiceService.listInvoices(
-                userId, firm.id(), workOrder.id(), PageRequest.of(0, 10));
-        assertEquals(1, page.getTotalElements());
-        assertNull(page.getContent().getFirst().markdownText());
-
-        Integer opaqueKeys = jdbcTemplate.queryForObject(
-                "select count(*) from work_order_invoices where storage_key like ?",
-                Integer.class,
-                firm.id() + "/" + workOrder.id() + "/invoices/%"
-        );
-        assertEquals(1, opaqueKeys);
-
-        invoiceService.deleteInvoice(userId, firm.id(), workOrder.id(), uploaded.id());
-        assertEquals(0, jdbcTemplate.queryForObject(
-                "select count(*) from work_order_invoices where work_order_id = ?",
-                Integer.class,
-                workOrder.id()
-        ));
-    }
-
-    @Test
-    void structuresLineItemsFromReadyInvoice() throws Exception {
-        authService.signup(new AuthContracts.SignupSpec("invoice-extract@example.com", "password123", "Extract IT"));
-        UUID userId = userRepository.findByEmailIgnoreCase("invoice-extract@example.com").orElseThrow().getId();
-
-        FirmContracts.FirmSummary firm =
-                firmService.createFirm(userId, new FirmContracts.CreateFirmSpec("Firm Extract"));
         WorkOrderSummary workOrder = workOrderService.createWorkOrder(
                 userId, firm.id(),
                 new WorkOrderContracts.CreateWorkOrderSpec(
                         "Renovare", "Client", "Bucharest", null,
                         LocalDate.now(ZoneOffset.UTC).plusDays(14)));
 
-        MockMultipartFile pdf = new MockMultipartFile(
-                "file", "factura.pdf", "application/pdf", "%PDF-1.4".getBytes(StandardCharsets.UTF_8));
-        InvoiceSummary uploaded = invoiceService.upload(userId, firm.id(), workOrder.id(), pdf);
+        // Text PDF → PDFBox text → stub text-LLM returns deterministic product JSON.
+        MockMultipartFile invoice = new MockMultipartFile(
+                "file", "factura.pdf", "application/pdf", textPdf("Factura test - Widget A x2"));
 
-        waitUntilReady(uploaded.id(), firm.id(), workOrder.id(), userId);
+        InvoiceSummary uploaded = invoiceService.upload(userId, firm.id(), workOrder.id(), invoice);
+        assertEquals(InvoiceProcessingStatus.PENDING, uploaded.processingStatus());
 
-        // The READY invoice enqueues a PENDING extraction; drive the structuring worker to completion.
         ExtractionDetail extraction = waitUntilExtracted(userId, firm.id(), workOrder.id(), uploaded.id());
 
         assertEquals(InvoiceExtractionStatus.READY, extraction.status());
-        assertEquals("Stub Supplier SRL", extraction.supplierName());
-        assertEquals(1, extraction.lineItems().size());
-        ExtractionDetail.Line line = extraction.lineItems().getFirst();
-        assertEquals("Stub Product", line.rawDescription());
-        assertEquals("STUB-SKU", line.sku());
-        assertEquals(0, line.quantity().compareTo(new java.math.BigDecimal("2")));
-        assertEquals(0, line.unitPrice().compareTo(new java.math.BigDecimal("50.00")));
+        assertNotNull(extraction.rawJson());
+        assertEquals(1, extraction.products().size());
+        ExtractionDetail.Product product = extraction.products().getFirst();
+        assertEquals("Stub Product", product.name());
+        assertEquals("STUB-SKU", product.sku());
+        assertEquals(0, product.quantity().compareTo(new BigDecimal("2")));
+
+        // Invoice status mirrors the extraction outcome.
+        InvoiceSummary ready = invoiceService.getInvoice(userId, firm.id(), workOrder.id(), uploaded.id());
+        assertEquals(InvoiceProcessingStatus.READY, ready.processingStatus());
+
+        Page<InvoiceSummary> page = invoiceService.listInvoices(
+                userId, firm.id(), workOrder.id(), PageRequest.of(0, 10));
+        assertEquals(1, page.getTotalElements());
+
+        invoiceService.deleteInvoice(userId, firm.id(), workOrder.id(), uploaded.id());
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "select count(*) from work_order_invoices where work_order_id = ?",
+                Integer.class, workOrder.id()));
+        // Extraction + line items cascade away with the invoice.
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "select count(*) from invoice_extractions where invoice_id = ?",
+                Integer.class, uploaded.id()));
+    }
+
+    private static byte[] textPdf(String text) throws Exception {
+        try (org.apache.pdfbox.pdmodel.PDDocument doc = new org.apache.pdfbox.pdmodel.PDDocument()) {
+            org.apache.pdfbox.pdmodel.PDPage page = new org.apache.pdfbox.pdmodel.PDPage();
+            doc.addPage(page);
+            try (org.apache.pdfbox.pdmodel.PDPageContentStream cs =
+                         new org.apache.pdfbox.pdmodel.PDPageContentStream(doc, page)) {
+                cs.beginText();
+                cs.setFont(new org.apache.pdfbox.pdmodel.font.PDType1Font(
+                        org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.HELVETICA), 12);
+                cs.newLineAtOffset(50, 700);
+                cs.showText(text);
+                cs.endText();
+            }
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            doc.save(out);
+            return out.toByteArray();
+        }
     }
 
     private ExtractionDetail waitUntilExtracted(UUID userId, UUID firmId, UUID workOrderId, UUID invoiceId)
@@ -169,20 +146,5 @@ class WorkOrderInvoiceIntegrationTest extends IntegrationTestBase {
             TimeUnit.MILLISECONDS.sleep(100);
         }
         return fail("Invoice extraction did not reach READY status in time");
-    }
-
-    private void waitUntilReady(UUID invoiceId, UUID firmId, UUID workOrderId, UUID userId) throws Exception {
-        for (int i = 0; i < 30; i++) {
-            processingService.processPendingBatch(5);
-            InvoiceSummary current = invoiceService.getInvoice(userId, firmId, workOrderId, invoiceId);
-            if (current.processingStatus() == InvoiceProcessingStatus.READY) {
-                return;
-            }
-            if (current.processingStatus() == InvoiceProcessingStatus.FAILED) {
-                fail("Invoice processing failed: " + current.processingError());
-            }
-            TimeUnit.MILLISECONDS.sleep(100);
-        }
-        fail("Invoice did not reach READY status in time");
     }
 }

@@ -11,7 +11,7 @@ import com.mirceone.inventoryapp.repository.WorkOrderInvoiceRepository;
 import com.mirceone.inventoryapp.service.firms.access.FirmAccessService;
 import com.mirceone.inventoryapp.service.storage.BlobStorage;
 import com.mirceone.inventoryapp.service.support.AfterCommitExecutor;
-import com.mirceone.inventoryapp.service.workorders.invoices.InvoiceProcessingService;
+import com.mirceone.inventoryapp.service.workorders.invoices.extraction.InvoiceStructuringService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -57,7 +57,7 @@ class WorkOrderInvoiceServiceTest {
     @Mock
     private BlobStorage blobStorage;
     @Mock
-    private InvoiceProcessingService processingService;
+    private InvoiceStructuringService structuringService;
     @Mock
     private InvoiceExtractionRepository extractionRepository;
     @Mock
@@ -79,12 +79,13 @@ class WorkOrderInvoiceServiceTest {
                 userRepository,
                 blobStorage,
                 new AfterCommitExecutor(),
-                processingService,
+                structuringService,
                 extractionRepository,
                 lineItemRepository
         );
         when(props.getFeatures()).thenReturn(features);
         when(features.isWorkOrderEnabled()).thenReturn(true);
+        when(features.isInvoiceExtractionEnabled()).thenReturn(true);
         when(props.getStorage()).thenReturn(storage);
         when(storage.getMaxFileSizeBytes()).thenReturn(1024L * 1024);
         when(props.getInvoices()).thenReturn(invoices);
@@ -119,7 +120,7 @@ class WorkOrderInvoiceServiceTest {
         assertEquals("invoice.pdf", summary.displayName());
         assertEquals(InvoiceProcessingStatus.PENDING, summary.processingStatus());
         verify(blobStorage).store(contains("/invoices/"), any(), eq(3L));
-        verify(processingService).processAsync(any());
+        verify(structuringService).processAsync(any());
     }
 
     @Test
@@ -152,7 +153,7 @@ class WorkOrderInvoiceServiceTest {
         ArgumentCaptor<WorkOrderInvoiceEntity> captor = ArgumentCaptor.forClass(WorkOrderInvoiceEntity.class);
         verify(invoiceRepository).saveAndFlush(captor.capture());
         assertNull(captor.getValue().getProcessingError());
-        verify(processingService).processAsync(invoiceId);
+        verify(structuringService).processAsync(any());
     }
 
     private FirmWorkOrderEntity existingWorkOrder() {
