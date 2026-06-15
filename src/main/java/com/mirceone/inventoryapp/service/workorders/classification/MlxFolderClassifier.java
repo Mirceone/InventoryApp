@@ -8,6 +8,7 @@ import com.mirceone.inventoryapp.service.ai.AiService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -26,7 +27,7 @@ public class MlxFolderClassifier {
     private final ObjectProvider<AiModelIdResolver> modelIdResolver;
 
     public MlxFolderClassifier(
-            AiService aiService,
+            @Qualifier("generalAi") AiService aiService,
             AppIntegrationProperties props,
             OpsEventRepository opsEventRepository,
             WorkOrderFolderResolver folderResolver,
