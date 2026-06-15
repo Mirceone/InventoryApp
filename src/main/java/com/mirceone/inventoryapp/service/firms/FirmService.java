@@ -9,6 +9,7 @@ import com.mirceone.inventoryapp.model.MemberRole;
 import com.mirceone.inventoryapp.repository.FirmMemberRepository;
 import com.mirceone.inventoryapp.repository.FirmRepository;
 import com.mirceone.inventoryapp.repository.FirmStatusHistoryRepository;
+import com.mirceone.inventoryapp.repository.WorkOrderActivityRepository;
 import com.mirceone.inventoryapp.repository.WorkOrderFileRepository;
 import com.mirceone.inventoryapp.repository.WorkOrderInvoiceRepository;
 import com.mirceone.inventoryapp.service.storage.BlobStorage;
@@ -45,6 +46,7 @@ public class FirmService {
     private final FirmMemberRepository firmMemberRepository;
     private final WorkOrderFileRepository workOrderFileRepository;
     private final WorkOrderInvoiceRepository workOrderInvoiceRepository;
+    private final WorkOrderActivityRepository workOrderActivityRepository;
     private final FirmStatusHistoryRepository firmStatusHistoryRepository;
     private final BlobStorage blobStorage;
     private final CategoryService categoryService;
@@ -57,6 +59,7 @@ public class FirmService {
             FirmMemberRepository firmMemberRepository,
             WorkOrderFileRepository workOrderFileRepository,
             WorkOrderInvoiceRepository workOrderInvoiceRepository,
+            WorkOrderActivityRepository workOrderActivityRepository,
             FirmStatusHistoryRepository firmStatusHistoryRepository,
             BlobStorage blobStorage,
             CategoryService categoryService,
@@ -68,6 +71,7 @@ public class FirmService {
         this.firmMemberRepository = firmMemberRepository;
         this.workOrderFileRepository = workOrderFileRepository;
         this.workOrderInvoiceRepository = workOrderInvoiceRepository;
+        this.workOrderActivityRepository = workOrderActivityRepository;
         this.firmStatusHistoryRepository = firmStatusHistoryRepository;
         this.blobStorage = blobStorage;
         this.categoryService = categoryService;
@@ -152,6 +156,7 @@ public class FirmService {
         // cascading delete of the folder trees.
         workOrderFileRepository.deleteByFirmId(firmId);
         workOrderInvoiceRepository.deleteByFirmId(firmId);
+        workOrderActivityRepository.deleteByFirmId(firmId);
         firmRepository.deleteById(firmId);
         String prefix = WorkOrderStorageKeys.firmPrefix(firmId);
         afterCommitExecutor.execute(() -> deletePrefixQuietly(firmId, prefix));

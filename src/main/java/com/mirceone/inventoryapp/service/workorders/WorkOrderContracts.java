@@ -54,4 +54,10 @@ public final class WorkOrderContracts {
             UUID folderId
     ) {
     }
+
+    public record CreateActivitySpec(
+            String title,
+            String description
+    ) {
+    }
 }

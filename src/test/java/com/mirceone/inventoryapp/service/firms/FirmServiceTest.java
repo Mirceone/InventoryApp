@@ -7,6 +7,7 @@ import com.mirceone.inventoryapp.model.MemberRole;
 import com.mirceone.inventoryapp.repository.FirmMemberRepository;
 import com.mirceone.inventoryapp.repository.FirmRepository;
 import com.mirceone.inventoryapp.repository.FirmStatusHistoryRepository;
+import com.mirceone.inventoryapp.repository.WorkOrderActivityRepository;
 import com.mirceone.inventoryapp.repository.WorkOrderFileRepository;
 import com.mirceone.inventoryapp.repository.WorkOrderInvoiceRepository;
 import com.mirceone.inventoryapp.service.firms.access.FirmAccessService;
@@ -44,6 +45,8 @@ class FirmServiceTest {
     @Mock
     private WorkOrderInvoiceRepository workOrderInvoiceRepository;
     @Mock
+    private WorkOrderActivityRepository workOrderActivityRepository;
+    @Mock
     private FirmStatusHistoryRepository firmStatusHistoryRepository;
     @Mock
     private BlobStorage blobStorage;
@@ -66,6 +69,7 @@ class FirmServiceTest {
                 firmMemberRepository,
                 workOrderFileRepository,
                 workOrderInvoiceRepository,
+                workOrderActivityRepository,
                 firmStatusHistoryRepository,
                 blobStorage,
                 categoryService,
@@ -136,6 +140,7 @@ class FirmServiceTest {
 
         verify(workOrderFileRepository).deleteByFirmId(firmId);
         verify(workOrderInvoiceRepository).deleteByFirmId(firmId);
+        verify(workOrderActivityRepository).deleteByFirmId(firmId);
         verify(firmRepository).deleteById(firmId);
         verify(blobStorage).deleteByPrefix(firmId + "/");
     }
